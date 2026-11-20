@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ap://schemas/envelope/1.0.0",
+  "title": "agentic-pipeline CloudEvents envelope",
+  "type": "object",
+  "required": [
+    "specversion", "id", "source", "type", "time", "subject",
+    "datacontenttype", "dataschema",
+    "tenant", "team", "repo", "partitionkey",
+    "correlationid", "causationid", "traceparent", "data"
+  ],
+  "properties": {
+    "specversion": { "const": "1.0" },
+    "id": { "type": "string", "format": "uuid", "description": "UUIDv7" },
+    "source": { "type": "string", "format": "uri-reference" },
+    "type": {
+      "type": "string",
+      "pattern": "^ap\\.[a-z_]+(\\.[a-z_]+)+\\.v[0-9]+$"
+    },
+    "time": { "type": "string", "format": "date-time" },
+    "subject": { "type": "string", "minLength": 1 },
+    "datacontenttype": { "const": "application/json" },
+    "dataschema": { "type": "string", "pattern": "^ap://schemas/" },
+
+    "tenant": { "type": "string", "minLength": 1 },
+    "team": { "type": "string", "minLength": 1 },
+    "repo": { "type": "string", "pattern": "^(gh|gl|bb):[0-9]+$|^_platform$" },
+    "partitionkey": { "type": "string", "minLength": 1 },
+    "correlationid": { "type": "string", "minLength": 1 },
+    "causationid": { "type": "string" },
+    "traceparent": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$"
+    },
+
+    "origin": {
+      "enum": ["webhook", "reconciler", "replay", "api", "scheduler", "agent", "executor", "system", "synthetic-test"]
+    },
+    "actor": {
+      "type": "object",
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": { "enum": ["human", "bot", "agent", "system"] },
+        "id": { "type": "string" },
+        "login": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "sensitivity": { "enum": ["public", "internal", "confidential"] },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "providerdelivery": { "type": "string" },
+    "expiresat": { "type": "string", "format": "date-time" },
+
+    "data": { "type": "object" }
+  },
+  "additionalProperties": false
+}

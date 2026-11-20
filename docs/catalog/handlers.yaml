@@ -1,0 +1,143 @@
+# Handler registry — machine-readable source of truth for docs/13-event-handlers.md
+# Subscriptions may use type globs (ap.build.scan.*); the Schema Gate expands them against the catalog.
+# ordering: none | per-repo | per-subject     latency: hot (<1s) | warm (<30s) | cold (minutes)
+version: 0.1.0
+
+categories:
+  ingestion:            H-ING
+  routing:              H-RTE
+  orchestration:        H-ORC
+  execution:            H-EXE
+  diagnosis-remediation: H-DIAG
+  gates-policy:         H-GATE
+  supply-chain:         H-SC
+  security-response:    H-SEC
+  release-deployment:   H-REL
+  reporting:            H-RPT
+  projections:          H-PRJ
+  lifecycle:            H-LIF
+  platform:             H-PLT
+  work-plane:           H-WRK
+  integration:          H-INT
+
+handlers:
+  # ── Ingestion ──────────────────────────────────────────────────────────
+  - { id: H-ING-01, name: webhook-receiver,        kind: http,       latency: hot,  ordering: none,        idem: "X-GitHub-Delivery",           subscribes: [http], emits: [ap.raw.github.received.v1, ap.raw.generic.received.v1] }
+  - { id: H-ING-02, name: normalizer,              kind: router,     latency: hot,  ordering: per-repo,    idem: "deliveryId+mappingVersion",   subscribes: [ap.raw.*], emits: [L1.*, ap.raw.ignored.v1] }
+  - { id: H-ING-03, name: reconciler,              kind: controller, latency: cold, ordering: per-repo,    idem: "repo+objectId+observedState", subscribes: [timer, ap.tenant.installed.v1, ap.repo.added.v1], emits: [L1.* (origin=reconciler), ap.repo.settings.drift.detected.v1] }
+  - { id: H-ING-04, name: comment-command-parser,  kind: classifier, latency: hot,  ordering: per-subject, idem: "commentId",                   subscribes: [ap.change.comment.created.v1], emits: [ap.command.received.v1] }
+  - { id: H-ING-05, name: external-feed-adapters,  kind: router,     latency: warm, ordering: none,        idem: "upstreamId",                  subscribes: [external], emits: [ap.dependency.upstream.released.v1, ap.security.advisory.published.v1, ap.environment.*] }
+
+  # ── Routing ────────────────────────────────────────────────────────────
+  - { id: H-RTE-01, name: trigger-router,          kind: router,     latency: hot,  ordering: per-repo,    idem: "triggerEventId+pipelineKind", subscribes: [ap.scm.*, ap.change.*, ap.mergequeue.*, ap.schedule.fired.v1, ap.security.vulnerability.alert.opened.v1, ap.dependency.update.proposed.v1, ap.scm.tag.created.v1], emits: [ap.pipeline.run.requested.v1, ap.release.requested.v1, ap.deployment.requested.v1] }
+  - { id: H-RTE-02, name: command-authorizer,      kind: classifier, latency: hot,  ordering: per-subject, idem: "commandId",                   subscribes: [ap.command.received.v1], emits: [ap.command.accepted.v1, ap.command.rejected.v1, "intents"] }
+  - { id: H-RTE-03, name: internal-dependency-fanout, kind: router,  latency: warm, ordering: none,        idem: "package@version+dependentRepo", subscribes: [ap.artifact.published.v1, ap.dependency.upstream.released.v1], emits: [ap.pipeline.run.requested.v1] }
+  - { id: H-RTE-04, name: advisory-fanout,         kind: router,     latency: warm, ordering: none,        idem: "advisory+repo",               subscribes: [ap.security.advisory.published.v1], emits: [ap.security.vulnerability.alert.opened.v1] }
+  - { id: H-RTE-05, name: pipeline-chainer,        kind: router,     latency: warm, ordering: per-repo,    idem: "completedEventId+nextKind",   subscribes: [ap.pipeline.run.completed.v1, ap.release.published.v1, ap.deployment.completed.v1], emits: [ap.pipeline.run.requested.v1, ap.release.requested.v1, ap.deployment.requested.v1] }
+
+  # ── Orchestration ──────────────────────────────────────────────────────
+  - { id: H-ORC-01, name: run-orchestrator,        kind: controller, latency: hot,  ordering: per-subject, idem: "runId",                       subscribes: [ap.pipeline.run.requested.v1, ap.pipeline.job.*, ap.build.compile.completed.v1, ap.build.image.index.assembled.v1, ap.build.version.computed.v1, ap.artifact.*, ap.gate.evaluated.v1, ap.approval.*, ap.agent.proposal.*, ap.build.job.cancelled.v1, ap.build.attestation.failed.v1, ap.environment.ephemeral.*, ap.integration.suite.completed.v1], emits: [ap.pipeline.run.*, ap.pipeline.stage.*, ap.environment.ephemeral.requested.v1, ap.build.sandbox.requested.v1, ap.agent.task.assigned.v1, ap.approval.requested.v1, ap.build.publish.requested.v1] }
+  - { id: H-ORC-02, name: concurrency-supersession, kind: controller, latency: hot, ordering: per-repo,    idem: "concurrencyGroup+headSha",    subscribes: [ap.pipeline.run.requested.v1, ap.change.updated.v1, ap.change.closed.v1, ap.scm.ref.deleted.v1, ap.mergequeue.entry.destroyed.v1, ap.build.source.checkout.failed.v1], emits: [ap.pipeline.run.superseded.v1, ap.pipeline.run.cancel.requested.v1] }
+  - { id: H-ORC-03, name: plan-resolver,           kind: controller, latency: warm, ordering: per-repo,    idem: "fingerprint",                 subscribes: [ap.pipeline.run.started.v1, ap.build.source.change_set.computed.v1, ap.build.toolchain.resolved.v1, ap.build.dependency.resolution.completed.v1], emits: [ap.build.plan.reused.v1, ap.build.plan.generated.v1, ap.agent.task.assigned.v1] }
+  - { id: H-ORC-04, name: plan-invalidator,        kind: classifier, latency: warm, ordering: per-repo,    idem: "planId+reason",               subscribes: [ap.repo.manifest.changed.v1, ap.build.toolchain.mismatch.detected.v1, ap.executor.image.updated.v1, ap.build.source.change_set.computed.v1, ap.diagnosis.completed.v1], emits: [ap.build.plan.invalidated.v1] }
+  - { id: H-ORC-05, name: fair-share-scheduler,    kind: controller, latency: hot,  ordering: none,        idem: "runId/jobKey/attempt",        subscribes: [ap.build.sandbox.requested.v1, ap.executor.pool.capacity.changed.v1], emits: [ap.pipeline.job.scheduled.v1, ap.build.queue.wait.reported.v1] }
+  - { id: H-ORC-06, name: retry-controller,        kind: classifier, latency: warm, ordering: per-subject, idem: "runId/jobKey/attempt",        subscribes: [ap.diagnosis.completed.v1, ap.pipeline.job.lost.v1, ap.build.sandbox.provision.failed.v1, ap.build.dependency.fetch.failed.v1, ap.build.test.services.failed.v1, ap.build.resource.exhausted.v1, ap.test.flake.detected.v1, ap.environment.ephemeral.provision.failed.v1], emits: [ap.pipeline.job.retry.requested.v1] }
+  - { id: H-ORC-07, name: watchdog,                kind: controller, latency: hot,  ordering: per-subject, idem: "runId/jobKey/attempt",        subscribes: [metric:ap.build.job.heartbeat, ap.build.step.hung.detected.v1], emits: [ap.build.job.cancel.requested.v1, ap.pipeline.job.lost.v1] }
+  - { id: H-ORC-08, name: cancellation-propagator, kind: controller, latency: hot,  ordering: per-subject, idem: "runId",                       subscribes: [ap.pipeline.run.cancel.requested.v1, ap.build.job.cancel.requested.v1, ap.tenant.uninstalled.v1, ap.repo.removed.v1], emits: [ap.build.job.cancelled.v1] }
+
+  # ── Execution services ─────────────────────────────────────────────────
+  - { id: H-EXE-01, name: sandbox-provisioner,     kind: applier,    latency: hot,  ordering: none,        idem: "runId/jobKey/attempt",        subscribes: [ap.pipeline.job.scheduled.v1], emits: [ap.build.sandbox.provisioned.v1, ap.build.sandbox.provision.failed.v1] }
+  - { id: H-EXE-02, name: identity-issuer,         kind: applier,    latency: hot,  ordering: none,        idem: "sandboxId",                   subscribes: [sync], emits: [ap.build.identity.issued.v1] }
+  - { id: H-EXE-03, name: secret-broker,           kind: applier,    latency: hot,  ordering: none,        idem: "sandboxId+secretName",        subscribes: [sync], emits: [ap.build.secret.granted.v1, ap.build.secret.denied.v1, ap.policy.decision.recorded.v1] }
+  - { id: H-EXE-04, name: cache-broker,            kind: applier,    latency: hot,  ordering: none,        idem: "key+writerRunId",             subscribes: [sync], emits: [ap.build.cache.restored.v1, ap.build.cache.saved.v1, ap.build.cache.poisoning.suspected.v1] }
+  - { id: H-EXE-05, name: publisher,               kind: applier,    latency: warm, ordering: per-subject, idem: "digest+target",               subscribes: [ap.build.publish.requested.v1], emits: [ap.artifact.published.v1, ap.build.publish.failed.v1] }
+  - { id: H-EXE-06, name: sandbox-reaper,          kind: janitor,    latency: warm, ordering: none,        idem: "sandboxId",                   subscribes: [ap.pipeline.job.completed.v1, ap.build.job.cancelled.v1, ap.build.job.timed_out.v1], emits: [ap.build.sandbox.destroyed.v1] }
+
+  # ── Diagnosis & remediation ────────────────────────────────────────────
+  - { id: H-DIAG-01, name: failure-classifier,     kind: classifier, latency: warm, ordering: per-subject, idem: "runId/jobKey/attempt",        subscribes: ["catalog/*-events.yaml where failure != false", ap.pipeline.job.completed.v1], emits: [ap.diagnosis.completed.v1] }
+  - { id: H-DIAG-02, name: diagnosis-dispatcher,   kind: agent-invoker, latency: cold, ordering: per-subject, idem: "runId/jobKey/attempt+logDigest", subscribes: ["ap.diagnosis.completed.v1 (class=unknown|confidence<0.7)"], emits: [ap.agent.task.assigned.v1, ap.diagnosis.completed.v1] }
+  - { id: H-DIAG-03, name: flake-detector,         kind: classifier, latency: warm, ordering: none,        idem: "testId+sha",                  subscribes: [ap.build.test.case.failed.v1, ap.test.results.reported.v1, ap.build.test.timeout.v1], emits: [ap.test.flake.detected.v1] }
+  - { id: H-DIAG-04, name: quarantine-manager,     kind: controller, latency: cold, ordering: per-repo,    idem: "testId",                      subscribes: [ap.test.flake.detected.v1, ap.command.accepted.v1], emits: [ap.test.quarantined.v1, ap.test.unquarantined.v1] }
+  - { id: H-DIAG-05, name: remediation-dispatcher, kind: agent-invoker, latency: cold, ordering: per-repo,  idem: "diagnosisId|alertId",         subscribes: [ap.diagnosis.completed.v1, ap.build.dependency.lockfile.drift.detected.v1, ap.build.format.check.completed.v1, ap.build.codegen.drift.detected.v1, ap.build.toolchain.*, ap.build.scan.sca.completed.v1, ap.build.scan.container.completed.v1, ap.security.vulnerability.alert.opened.v1, ap.build.publish.failed.v1, ap.build.resource.exhausted.v1], emits: [ap.agent.task.assigned.v1] }
+  - { id: H-DIAG-06, name: proposal-gatekeeper,    kind: classifier, latency: warm, ordering: per-subject, idem: "proposalId",                  subscribes: [ap.agent.proposal.created.v1], emits: [ap.policy.decision.recorded.v1, ap.approval.requested.v1, ap.agent.proposal.discarded.v1] }
+  - { id: H-DIAG-07, name: remediation-applier,    kind: applier,    latency: warm, ordering: per-repo,    idem: "proposalId",                  subscribes: ["approved proposals", ap.approval.granted.v1, ap.changeset.merge.requested.v1], emits: [ap.agent.proposal.applied.v1] }
+  - { id: H-DIAG-08, name: mainline-guardian,      kind: controller, latency: warm, ordering: per-repo,    idem: "ref+firstFailingSha",         subscribes: ["ap.pipeline.run.completed.v1 (default branch)"], emits: [ap.build.mainline.broken.v1, ap.build.mainline.recovered.v1, ap.pipeline.run.requested.v1 (bisect), ap.agent.task.assigned.v1 (revert)] }
+
+  # ── Gates, policy & approvals ──────────────────────────────────────────
+  - { id: H-GATE-01, name: gate-evaluator,         kind: classifier, latency: warm, ordering: per-subject, idem: "runId+gate",                  subscribes: [ap.build.test.*, ap.build.scan.*, ap.build.lint.completed.v1, ap.build.format.check.completed.v1, ap.build.typecheck.completed.v1, ap.build.static.baseline.regressed.v1, ap.build.compile.warnings.regressed.v1, ap.build.dependency.policy.violation.v1, ap.build.dependency.vulnerable.detected.v1, ap.build.workspace.integrity.verified.v1, ap.artifact.signed.v1, ap.artifact.provenance.generated.v1, ap.integration.suite.completed.v1], emits: [ap.gate.evaluated.v1] }
+  - { id: H-GATE-02, name: policy-decision-point,  kind: service,    latency: hot,  ordering: none,        idem: "query+inputDigest+bundle",    subscribes: [sync], emits: [ap.policy.decision.recorded.v1] }
+  - { id: H-GATE-03, name: waiver-manager,         kind: controller, latency: warm, ordering: per-repo,    idem: "gate+scope",                  subscribes: [ap.command.accepted.v1], emits: [ap.gate.waiver.granted.v1] }
+  - { id: H-GATE-04, name: approval-manager,       kind: controller, latency: warm, ordering: per-subject, idem: "approvalId",                  subscribes: [ap.approval.requested.v1, ap.change.review.submitted.v1, external:deployment-protection-rule], emits: [ap.approval.granted.v1, ap.approval.denied.v1, ap.approval.expired.v1] }
+
+  # ── Supply chain ───────────────────────────────────────────────────────
+  - { id: H-SC-01, name: provenance-generator,     kind: applier,    latency: warm, ordering: per-subject, idem: "artifactDigest",              subscribes: [ap.artifact.built.v1, ap.build.image.index.assembled.v1, ap.build.source.checked_out.v1, ap.build.toolchain.resolved.v1, ap.build.dependency.resolution.completed.v1, ap.build.sandbox.provisioned.v1, ap.build.sandbox.destroyed.v1, ap.build.environment.prepared.v1, ap.build.workspace.integrity.verified.v1], emits: [ap.artifact.provenance.generated.v1] }
+  - { id: H-SC-02, name: signer,                   kind: applier,    latency: warm, ordering: per-subject, idem: "artifactDigest+attestationType", subscribes: [ap.artifact.provenance.generated.v1, ap.artifact.sbom.generated.v1], emits: [ap.artifact.signed.v1, ap.build.attestation.failed.v1] }
+  - { id: H-SC-03, name: sbom-indexer,             kind: projector,  latency: cold, ordering: none,        idem: "artifactDigest",              subscribes: [ap.artifact.sbom.generated.v1, ap.build.vex.generated.v1], emits: [] }
+  - { id: H-SC-04, name: image-index-assembler,    kind: controller, latency: warm, ordering: per-subject, idem: "runId+imageName",             subscribes: [ap.build.image.built.v1], emits: [ap.build.image.index.assembled.v1] }
+  - { id: H-SC-05, name: revocation-handler,       kind: responder,  latency: hot,  ordering: none,        idem: "artifactId",                  subscribes: [ap.artifact.revoked.v1], emits: [ap.notification.sent.v1] }
+
+  # ── Security response ──────────────────────────────────────────────────
+  - { id: H-SEC-01, name: secret-exposure-responder, kind: responder, latency: hot, ordering: none,        idem: "locationDigest",              subscribes: [ap.build.secret.exposure.detected.v1, ap.security.secret.detected.v1], emits: [ap.artifact.revoked.v1, ap.notification.sent.v1] }
+  - { id: H-SEC-02, name: integrity-malware-responder, kind: responder, latency: hot, ordering: none,      idem: "package@version",             subscribes: [ap.build.dependency.integrity.failed.v1, ap.build.scan.malware.suspected.v1], emits: [ap.pipeline.run.cancel.requested.v1, ap.notification.sent.v1] }
+  - { id: H-SEC-03, name: cache-poisoning-responder, kind: responder, latency: hot, ordering: none,        idem: "cacheKey",                    subscribes: [ap.build.cache.poisoning.suspected.v1], emits: [ap.pipeline.run.requested.v1 (re-verify)] }
+  - { id: H-SEC-04, name: egress-anomaly-responder, kind: responder, latency: warm, ordering: none,        idem: "runId+destination",           subscribes: [ap.build.network.egress.denied.v1], emits: [ap.agent.proposal.created.v1 (allowlist), ap.agent.escalated.v1] }
+  - { id: H-SEC-05, name: guardrail-responder,     kind: responder,  latency: hot,  ordering: none,        idem: "taskId+guardrail",            subscribes: [ap.agent.guardrail.triggered.v1], emits: [ap.agent.escalated.v1, ap.notification.sent.v1] }
+
+  # ── Release & deployment ───────────────────────────────────────────────
+  - { id: H-REL-01, name: release-coordinator,     kind: controller, latency: cold, ordering: per-repo,    idem: "repo+version",                subscribes: [ap.release.requested.v1, ap.build.version.computed.v1, ap.build.test.contract.verified.v1, ap.artifact.published.v1], emits: [ap.agent.task.assigned.v1, ap.release.prepared.v1, ap.release.published.v1] }
+  - { id: H-REL-02, name: deployment-coordinator,  kind: controller, latency: warm, ordering: per-subject, idem: "deploymentId",                subscribes: [ap.deployment.requested.v1, ap.approval.*, external:cd-callback], emits: [ap.deployment.started.v1, ap.deployment.completed.v1] }
+  - { id: H-REL-03, name: promotion-controller,    kind: controller, latency: warm, ordering: per-subject, idem: "artifactId+toEnv",            subscribes: [ap.deployment.completed.v1, ap.environment.health.*], emits: [ap.deployment.requested.v1, ap.artifact.promoted.v1] }
+  - { id: H-REL-04, name: rollback-guard,          kind: responder,  latency: hot,  ordering: per-subject, idem: "deploymentId",                subscribes: [ap.environment.health.degraded.v1], emits: [ap.deployment.rollback.requested.v1] }
+
+  # ── Reporting ──────────────────────────────────────────────────────────
+  - { id: H-RPT-01, name: github-checks-reporter,  kind: reporter,   latency: warm, ordering: per-subject, idem: "external_id+sequence",        subscribes: [ap.pipeline.run.*, ap.pipeline.job.*, ap.gate.evaluated.v1, ap.diagnosis.completed.v1, ap.build.compile.*, ap.build.lint.completed.v1, ap.build.test.*, ap.build.scan.*, ap.integration.suite.completed.v1, ap.integration.failure.attributed.v1], emits: [] }
+  - { id: H-RPT-02, name: pr-conversation-reporter, kind: reporter,  latency: warm, ordering: per-subject, idem: "change+commentSlot",          subscribes: [ap.command.accepted.v1, ap.command.rejected.v1, ap.diagnosis.completed.v1, ap.agent.proposal.applied.v1, ap.approval.requested.v1, ap.build.secret.denied.v1, ap.build.source.merge_ref.computed.v1, ap.build.test.performance.regressed.v1, ap.build.docs.published.v1], emits: [] }
+  - { id: H-RPT-03, name: notifier,                kind: reporter,   latency: warm, ordering: none,        idem: "relatedEventId+audience",     subscribes: ["severity in (p0,p1)", ap.agent.escalated.v1, ap.approval.requested.v1, ap.build.health.degraded.v1, ap.build.duration.regressed.v1, ap.test.flake.detected.v1], emits: [ap.notification.sent.v1] }
+  - { id: H-RPT-04, name: deployment-status-reporter, kind: reporter, latency: warm, ordering: per-subject, idem: "deploymentId+state",         subscribes: [ap.deployment.*], emits: [] }
+
+  # ── Projections ────────────────────────────────────────────────────────
+  - { id: H-PRJ-01, name: change-timeline,         kind: projector,  latency: warm, ordering: per-repo,    subscribes: ["*"] }
+  - { id: H-PRJ-02, name: run-state,               kind: projector,  latency: warm, ordering: per-subject, subscribes: [ap.pipeline.*, ap.build.*] }
+  - { id: H-PRJ-03, name: repo-build-health,       kind: projector,  latency: cold, ordering: per-repo,    subscribes: [ap.pipeline.run.completed.v1, ap.test.*, ap.build.cache.*, ap.build.reproducibility.checked.v1, ap.build.step.retried.v1], emits: [ap.build.health.degraded.v1] }
+  - { id: H-PRJ-04, name: build-perf-regression,   kind: projector,  latency: cold, ordering: per-repo,    subscribes: [ap.build.resources.reported.v1, ap.build.compile.completed.v1, ap.build.cache.remote_exec.summary.v1], emits: [ap.build.duration.regressed.v1] }
+  - { id: H-PRJ-05, name: dora,                    kind: projector,  latency: cold, ordering: per-repo,    subscribes: [ap.change.merged.v1, ap.deployment.completed.v1, ap.deployment.rolled_back.v1, ap.environment.incident.*] }
+  - { id: H-PRJ-06, name: cost-attribution,        kind: projector,  latency: cold, ordering: none,        subscribes: [ap.build.resources.reported.v1, ap.build.queue.wait.reported.v1, ap.build.cache.restored.v1, ap.agent.task.completed.v1], emits: [ap.agent.budget.exceeded.v1] }
+  - { id: H-PRJ-07, name: scope-ledger,            kind: projector,  latency: cold, ordering: none,        subscribes: [ap.raw.ignored.v1, ap.pipeline.run.rejected.v1, ap.command.rejected.v1] }
+  - { id: H-PRJ-08, name: agent-quality,           kind: projector,  latency: cold, ordering: none,        subscribes: [ap.agent.proposal.*, ap.diagnosis.feedback.received.v1, ap.diagnosis.completed.v1] }
+  - { id: H-PRJ-09, name: reverse-dependency-graph, kind: projector, latency: cold, ordering: none,        subscribes: [ap.build.dependency.internal.consumed.v1, ap.dependency.graph.updated.v1, ap.artifact.published.v1] }
+
+  # ── Lifecycle ──────────────────────────────────────────────────────────
+  - { id: H-LIF-01, name: tenant-repo-registry,    kind: controller, latency: warm, ordering: per-repo,    subscribes: [ap.tenant.*, ap.repo.*], emits: [ap.team.ownership.changed.v1] }
+  - { id: H-LIF-02, name: profile-scheduler,       kind: router,     latency: cold, ordering: per-repo,    subscribes: [ap.repo.added.v1, ap.build.plan.invalidated.v1, ap.schedule.fired.v1], emits: [ap.agent.task.assigned.v1] }
+  - { id: H-LIF-03, name: cache-gc,                kind: janitor,    latency: cold, ordering: none,        subscribes: [ap.change.closed.v1, ap.change.merged.v1, ap.scm.ref.deleted.v1, ap.repo.removed.v1, ap.tenant.uninstalled.v1] }
+  - { id: H-LIF-04, name: artifact-retention,      kind: janitor,    latency: cold, ordering: none,        subscribes: [timer, ap.change.closed.v1] }
+  - { id: H-LIF-05, name: ownership-resolver,      kind: classifier, latency: cold, ordering: per-repo,    subscribes: [ap.repo.added.v1, ap.scm.ref.updated.v1], emits: [ap.team.ownership.changed.v1] }
+
+  # ── Platform ───────────────────────────────────────────────────────────
+  - { id: H-PLT-01, name: schema-gate,             kind: interceptor, latency: hot, ordering: none,        subscribes: ["publish:*"] }
+  - { id: H-PLT-02, name: dlq-supervisor,          kind: controller, latency: cold, ordering: none,        subscribes: [ap.dlq.*] }
+  - { id: H-PLT-03, name: replay-controller,       kind: controller, latency: cold, ordering: none,        subscribes: [operator] }
+  - { id: H-PLT-04, name: archive-sink,            kind: projector,  latency: cold, ordering: per-repo,    subscribes: ["*"] }
+
+  # ── Work plane (docs/14) ───────────────────────────────────────────────
+  - { id: H-WRK-01, name: work-intake-router,      kind: router,     latency: hot,  ordering: per-subject, idem: "key+triggerEventId",          subscribes: [ap.work.item.assigned.v1, ap.work.item.transitioned.v1, ap.command.accepted.v1], emits: [ap.work.request.received.v1] }
+  - { id: H-WRK-02, name: work-comment-parser,     kind: classifier, latency: hot,  ordering: per-subject, idem: "commentId",                   subscribes: [ap.work.item.commented.v1], emits: [ap.work.guidance.provided.v1, ap.work.clarification.answered.v1, ap.work.plan.revision.requested.v1, ap.command.received.v1] }
+  - { id: H-WRK-03, name: work-item-orchestrator,  kind: controller, latency: warm, ordering: per-subject, idem: "workItemId",                  subscribes: [ap.work.request.received.v1, ap.work.repos.resolved.v1, ap.work.guidance.provided.v1, ap.work.clarification.*, ap.work.plan.*, ap.work.item.updated.v1, ap.work.item.unassigned.v1, ap.work.item.deleted.v1, ap.work.item.linked.v1, ap.devsession.ready_for_review.v1, ap.devsession.blocked.v1, ap.devsession.completed.v1, ap.changeset.*], emits: [ap.work.request.accepted.v1, ap.work.request.rejected.v1, ap.work.plan.requested.v1, ap.work.plan.proposed.v1, ap.work.plan.superseded.v1, ap.agent.task.assigned.v1, ap.devsession.requested.v1, ap.work.blocked.v1, ap.work.unblocked.v1, ap.work.completed.v1, ap.work.cancelled.v1] }
+  - { id: H-WRK-04, name: repo-resolver,           kind: classifier, latency: warm, ordering: per-subject, idem: "workItemId+contentDigest",    subscribes: [ap.work.request.received.v1], emits: [ap.work.repos.resolved.v1] }
+  - { id: H-WRK-05, name: plan-approval-manager,   kind: controller, latency: warm, ordering: per-subject, idem: "planId@version",              subscribes: [ap.work.plan.proposed.v1, ap.command.accepted.v1, ap.work.plan.revision.requested.v1], emits: [ap.work.plan.approved.v1, ap.work.plan.rejected.v1, ap.work.plan.expired.v1, ap.approval.requested.v1, ap.approval.granted.v1] }
+  - { id: H-WRK-06, name: session-orchestrator,    kind: controller, latency: warm, ordering: per-subject, idem: "sessionId",                   subscribes: [ap.devsession.requested.v1, ap.devsession.feedback.received.v1, ap.work.plan.superseded.v1, ap.work.guidance.provided.v1, ap.work.clarification.answered.v1, ap.agent.proposal.*, ap.agent.task.completed.v1, ap.work.cancelled.v1], emits: [ap.devsession.*, ap.agent.task.assigned.v1, ap.work.clarification.requested.v1] }
+  - { id: H-WRK-07, name: feedback-router,         kind: router,     latency: warm, ordering: per-subject, idem: "sourceEventId+sessionId",     subscribes: [ap.diagnosis.completed.v1, ap.integration.failure.attributed.v1, ap.gate.evaluated.v1, ap.change.review.submitted.v1, ap.change.comment.created.v1, ap.pipeline.run.completed.v1, ap.devsession.change.opened.v1], emits: [ap.devsession.feedback.received.v1] }
+  - { id: H-WRK-08, name: scope-guard,             kind: classifier, latency: hot,  ordering: per-subject, idem: "proposalId",                  subscribes: ["ap.agent.proposal.created.v1 (kind=commit)"], emits: [ap.work.plan.deviation.detected.v1] }
+  - { id: H-WRK-09, name: changeset-coordinator,   kind: controller, latency: warm, ordering: per-subject, idem: "changesetId",                 subscribes: [ap.work.plan.approved.v1, ap.devsession.change.opened.v1, ap.devsession.ready_for_review.v1, ap.devsession.commit.pushed.v1, ap.pipeline.run.completed.v1, ap.integration.suite.completed.v1, ap.change.review.submitted.v1, ap.change.merged.v1], emits: [ap.changeset.*, ap.pipeline.run.requested.v1] }
+  - { id: H-WRK-10, name: work-reporter-jira,      kind: reporter,   latency: warm, ordering: per-subject, idem: "workItemId+eventType+sequence", subscribes: [ap.work.*, ap.devsession.change.opened.v1, ap.devsession.ready_for_review.v1, ap.devsession.blocked.v1, ap.agent.escalated.v1, ap.changeset.partially_merged.v1], emits: [] }
+  - { id: H-WRK-11, name: clarification-manager,   kind: controller, latency: cold, ordering: per-subject, idem: "clarificationId",             subscribes: [ap.work.clarification.requested.v1, ap.work.clarification.answered.v1], emits: [ap.work.clarification.expired.v1, ap.notification.sent.v1] }
+
+  # ── Integration (docs/15) ──────────────────────────────────────────────
+  - { id: H-INT-01, name: ephemeral-env-manager,   kind: controller, latency: warm, ordering: per-subject, idem: "envId",                       subscribes: [ap.environment.ephemeral.requested.v1, ap.work.cancelled.v1, ap.devsession.cancelled.v1], emits: [ap.environment.ephemeral.provisioned.v1, ap.environment.ephemeral.provision.failed.v1, ap.environment.ephemeral.ready.v1, ap.environment.ephemeral.torn_down.v1] }
+  - { id: H-INT-02, name: integration-runner,      kind: job,        latency: warm, ordering: per-subject, idem: "envId+suite+attempt",         subscribes: [ap.environment.ephemeral.ready.v1], emits: [ap.integration.data.seeded.v1, ap.integration.suite.started.v1, ap.integration.suite.completed.v1] }
+  - { id: H-INT-03, name: failure-attributor,      kind: classifier, latency: warm, ordering: per-subject, idem: "envId+suite",                 subscribes: [ap.integration.suite.completed.v1], emits: [ap.integration.failure.attributed.v1] }
+  - { id: H-INT-04, name: env-reaper,              kind: janitor,    latency: cold, ordering: none,        idem: "envId",                       subscribes: [timer, ap.environment.ephemeral.provisioned.v1], emits: [ap.environment.ephemeral.torn_down.v1] }
+
+  # ── Work-plane projections ─────────────────────────────────────────────
+  - { id: H-PRJ-10, name: work-item-timeline,      kind: projector,  latency: warm, ordering: per-subject, subscribes: ["correlation wi-* (incl. links)"] }
+  - { id: H-PRJ-11, name: agent-dev-metrics,       kind: projector,  latency: cold, ordering: none,        subscribes: [ap.work.*, ap.devsession.*, ap.change.review.submitted.v1, ap.change.merged.v1] }

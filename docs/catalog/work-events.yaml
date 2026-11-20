@@ -1,0 +1,89 @@
+# Work-plane + integration event catalog — machine-readable source of truth for
+# docs/04-event-catalog.md §Work-plane domains, docs/14-work-plane.md, docs/15-integration-testing.md
+# Same field conventions as build-events.yaml.
+version: 0.1.0
+
+categories:
+  WI: { name: work-item,           plane: work }
+  WR: { name: work-request,        plane: work }
+  WG: { name: guidance-clarification, plane: work }
+  WP: { name: implementation-plan, plane: work }
+  WO: { name: work-outcome,        plane: work }
+  DS: { name: coding-session,      plane: work }
+  CS: { name: changeset,           plane: work }
+  EE: { name: ephemeral-environment, plane: delivery }
+  IT: { name: integration-test,    plane: delivery }
+
+events:
+  # WI — work item (L1, from Jira)
+  - { id: WK-WI-01, type: ap.work.item.assigned.v1,        class: fact,   tier: bus, severity: info, handlers: [H-WRK-01, H-PRJ-10] }
+  - { id: WK-WI-02, type: ap.work.item.unassigned.v1,      class: fact,   tier: bus, severity: info, handlers: [H-WRK-03] }
+  - { id: WK-WI-03, type: ap.work.item.transitioned.v1,    class: fact,   tier: bus, severity: info, handlers: [H-WRK-01, H-PRJ-10] }
+  - { id: WK-WI-04, type: ap.work.item.updated.v1,         class: fact,   tier: bus, severity: info, handlers: [H-WRK-03] }
+  - { id: WK-WI-05, type: ap.work.item.commented.v1,       class: fact,   tier: bus, severity: info, handlers: [H-WRK-02] }
+  - { id: WK-WI-06, type: ap.work.item.linked.v1,          class: fact,   tier: bus, severity: info, handlers: [H-WRK-03] }
+  - { id: WK-WI-07, type: ap.work.item.deleted.v1,         class: fact,   tier: bus, severity: info, handlers: [H-WRK-03] }
+
+  # WR — request & eligibility
+  - { id: WK-WR-01, type: ap.work.request.received.v1,     class: intent, tier: bus, severity: info, handlers: [H-WRK-03, H-WRK-04] }
+  - { id: WK-WR-02, type: ap.work.request.accepted.v1,     class: fact,   tier: bus, severity: info, handlers: [H-WRK-10, H-PRJ-11] }
+  - { id: WK-WR-03, type: ap.work.request.rejected.v1,     class: fact,   tier: bus, severity: warn, handlers: [H-WRK-10, H-PRJ-07] }
+  - { id: WK-WR-04, type: ap.work.repos.resolved.v1,       class: fact,   tier: bus, severity: info, handlers: [H-WRK-03] }
+
+  # WG — guidance & clarification
+  - { id: WK-WG-01, type: ap.work.guidance.provided.v1,    class: fact,   tier: bus, severity: info, handlers: [H-WRK-03, H-WRK-06, H-PRJ-10] }
+  - { id: WK-WG-02, type: ap.work.clarification.requested.v1, class: intent, tier: bus, severity: warn, handlers: [H-WRK-10, H-WRK-11] }
+  - { id: WK-WG-03, type: ap.work.clarification.answered.v1, class: fact, tier: bus, severity: info, handlers: [H-WRK-03, H-WRK-06, H-WRK-11] }
+  - { id: WK-WG-04, type: ap.work.clarification.expired.v1, class: fact,  tier: bus, severity: warn, handlers: [H-WRK-03] }
+
+  # WP — implementation plan (developer approval required)
+  - { id: WK-WP-01, type: ap.work.plan.requested.v1,       class: intent, tier: bus, severity: info, handlers: [H-WRK-03] }
+  - { id: WK-WP-02, type: ap.work.plan.proposed.v1,        class: fact,   tier: bus, severity: info, handlers: [H-WRK-05, H-WRK-10, H-PRJ-11] }
+  - { id: WK-WP-03, type: ap.work.plan.revision.requested.v1, class: fact, tier: bus, severity: info, handlers: [H-WRK-03, H-WRK-05] }
+  - { id: WK-WP-04, type: ap.work.plan.approved.v1,        class: fact,   tier: bus, severity: info, handlers: [H-WRK-03, H-WRK-09, H-WRK-10, H-PRJ-11] }
+  - { id: WK-WP-05, type: ap.work.plan.rejected.v1,        class: fact,   tier: bus, severity: info, handlers: [H-WRK-03, H-WRK-10] }
+  - { id: WK-WP-06, type: ap.work.plan.superseded.v1,      class: fact,   tier: bus, severity: warn, handlers: [H-WRK-06, H-WRK-10] }
+  - { id: WK-WP-07, type: ap.work.plan.expired.v1,         class: fact,   tier: bus, severity: warn, handlers: [H-WRK-03, H-WRK-10] }
+  - { id: WK-WP-08, type: ap.work.plan.deviation.detected.v1, class: fact, tier: bus, severity: warn, handlers: [H-WRK-03, H-WRK-10] }
+
+  # WO — work outcome
+  - { id: WK-WO-01, type: ap.work.blocked.v1,              class: fact,   tier: bus, severity: warn, handlers: [H-WRK-10, H-RPT-03] }
+  - { id: WK-WO-02, type: ap.work.unblocked.v1,            class: fact,   tier: bus, severity: info, handlers: [H-WRK-10] }
+  - { id: WK-WO-03, type: ap.work.completed.v1,            class: fact,   tier: bus, severity: info, handlers: [H-WRK-10, H-PRJ-11, H-PRJ-06] }
+  - { id: WK-WO-04, type: ap.work.cancelled.v1,            class: fact,   tier: bus, severity: info, handlers: [H-WRK-06, H-INT-01, H-WRK-10] }
+
+  # DS — coding sessions
+  - { id: WK-DS-01, type: ap.devsession.requested.v1,      class: intent, tier: bus,     severity: info, handlers: [H-WRK-06] }
+  - { id: WK-DS-02, type: ap.devsession.started.v1,        class: fact,   tier: bus,     severity: info, handlers: [H-WRK-10, H-PRJ-10] }
+  - { id: WK-DS-03, type: ap.devsession.checkpoint.v1,     class: fact,   tier: summary, severity: info, handlers: [H-PRJ-10] }
+  - { id: WK-DS-04, type: ap.devsession.inner_loop.completed.v1, class: fact, tier: summary, severity: info, handlers: [H-PRJ-11] }
+  - { id: WK-DS-05, type: ap.devsession.commit.pushed.v1,  class: fact,   tier: bus,     severity: info, handlers: [H-WRK-09, H-PRJ-10] }
+  - { id: WK-DS-06, type: ap.devsession.change.opened.v1,  class: fact,   tier: bus,     severity: info, handlers: [H-WRK-07, H-WRK-09, H-WRK-10] }
+  - { id: WK-DS-07, type: ap.devsession.feedback.received.v1, class: intent, tier: bus,  severity: info, handlers: [H-WRK-06] }
+  - { id: WK-DS-08, type: ap.devsession.iteration.started.v1, class: fact, tier: bus,    severity: info, handlers: [H-PRJ-11] }
+  - { id: WK-DS-09, type: ap.devsession.ready_for_review.v1, class: fact, tier: bus,     severity: info, handlers: [H-WRK-03, H-WRK-09, H-WRK-10] }
+  - { id: WK-DS-10, type: ap.devsession.blocked.v1,        class: fact,   tier: bus,     severity: warn, handlers: [H-WRK-03, H-WRK-10, H-RPT-03] }
+  - { id: WK-DS-11, type: ap.devsession.resumed.v1,        class: fact,   tier: bus,     severity: info, handlers: [H-PRJ-10] }
+  - { id: WK-DS-12, type: ap.devsession.completed.v1,      class: fact,   tier: bus,     severity: info, handlers: [H-WRK-03, H-PRJ-06, H-PRJ-11] }
+  - { id: WK-DS-13, type: ap.devsession.cancelled.v1,      class: fact,   tier: bus,     severity: info, handlers: [H-INT-01, H-EXE-06] }
+
+  # CS — multi-repo changesets
+  - { id: WK-CS-01, type: ap.changeset.created.v1,         class: fact,   tier: bus, severity: info, handlers: [H-WRK-03, H-PRJ-10] }
+  - { id: WK-CS-02, type: ap.changeset.member.updated.v1,  class: fact,   tier: bus, severity: info, handlers: [H-WRK-03, H-PRJ-10] }
+  - { id: WK-CS-03, type: ap.changeset.ready.v1,           class: fact,   tier: bus, severity: info, handlers: [H-RTE-01, H-WRK-03] }
+  - { id: WK-CS-04, type: ap.changeset.merge.requested.v1, class: intent, tier: bus, severity: info, handlers: [H-DIAG-07] }
+  - { id: WK-CS-05, type: ap.changeset.merged.v1,          class: fact,   tier: bus, severity: info, handlers: [H-WRK-03] }
+  - { id: WK-CS-06, type: ap.changeset.partially_merged.v1, class: fact,  tier: bus, severity: p1,   handlers: [H-WRK-03, H-WRK-10, H-RPT-03] }
+
+  # EE — ephemeral environments
+  - { id: WK-EE-01, type: ap.environment.ephemeral.requested.v1,   class: intent, tier: bus, severity: info, handlers: [H-INT-01] }
+  - { id: WK-EE-02, type: ap.environment.ephemeral.provisioned.v1, class: fact,   tier: bus, severity: info, handlers: [H-ORC-01, H-INT-04] }
+  - { id: WK-EE-03, type: ap.environment.ephemeral.provision.failed.v1, class: fact, tier: bus, severity: warn, failure: true, diagClass: infra, handlers: [H-DIAG-01, H-ORC-06] }
+  - { id: WK-EE-04, type: ap.environment.ephemeral.ready.v1,       class: fact,   tier: bus, severity: info, handlers: [H-ORC-01, H-INT-02] }
+  - { id: WK-EE-05, type: ap.environment.ephemeral.torn_down.v1,   class: fact,   tier: bus, severity: info, handlers: [H-PRJ-06] }
+
+  # IT — integration testing
+  - { id: WK-IT-01, type: ap.integration.data.seeded.v1,           class: fact,   tier: summary,   severity: info, handlers: [H-PRJ-10] }
+  - { id: WK-IT-02, type: ap.integration.suite.started.v1,         class: fact,   tier: telemetry, severity: info, handlers: [] }
+  - { id: WK-IT-03, type: ap.integration.suite.completed.v1,       class: fact,   tier: summary,   severity: info, failure: conditional, diagClass: attributed, handlers: [H-INT-03, H-GATE-01, H-ORC-01, H-RPT-01, H-WRK-09] }
+  - { id: WK-IT-04, type: ap.integration.failure.attributed.v1,    class: fact,   tier: bus,       severity: warn, handlers: [H-WRK-07, H-RPT-01] }

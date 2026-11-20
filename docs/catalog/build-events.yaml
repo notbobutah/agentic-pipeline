@@ -1,0 +1,161 @@
+# Build-process event catalog — machine-readable source of truth for docs/12-build-process-events.md
+# Fields:
+#   id        stable reference (BP-<category>-<nn>)
+#   type      CloudEvents type
+#   class     fact | intent | signal
+#   tier      bus | summary | telemetry   (handlers may only subscribe to bus/summary)
+#   severity  info | warn | p1 | p0       (default routing urgency)
+#   failure   true if this event represents a failure that the Failure Classifier maps
+#   diagClass default diagnosis class (see docs/12 §6)
+#   handlers  handler IDs (docs/13) that consume it
+#   existing  true if already defined in docs/04-event-catalog.md
+version: 0.1.0
+
+categories:
+  A: { name: job-lifecycle-sandbox,   phase: provision }
+  B: { name: source-workspace,        phase: source }
+  C: { name: toolchain-environment,   phase: toolchain }
+  D: { name: identity-secrets,        phase: identity }
+  E: { name: dependencies,            phase: dependencies }
+  F: { name: caching,                 phase: cache }
+  G: { name: code-generation,         phase: codegen }
+  H: { name: static-checks,           phase: static }
+  I: { name: compilation,             phase: compile }
+  J: { name: testing,                 phase: test }
+  K: { name: security-scanning,       phase: scan }
+  L: { name: packaging,               phase: package }
+  M: { name: supply-chain,            phase: supply-chain }
+  N: { name: publishing,              phase: publish }
+  O: { name: resource-performance,    phase: continuous }
+  P: { name: anomaly-health,          phase: continuous }
+  Q: { name: control,                 phase: any }
+
+events:
+  # A — job lifecycle & sandbox
+  - { id: BP-A-01, type: ap.build.sandbox.requested.v1,          class: intent, tier: bus,       severity: info, handlers: [H-ORC-05] }
+  - { id: BP-A-02, type: ap.build.sandbox.provisioned.v1,        class: fact,   tier: bus,       severity: info, handlers: [H-SC-01, H-PRJ-02] }
+  - { id: BP-A-03, type: ap.build.sandbox.provision.failed.v1,   class: fact,   tier: bus,       severity: warn, failure: true, diagClass: infra, handlers: [H-DIAG-01, H-ORC-06] }
+  - { id: BP-A-04, type: ap.pipeline.job.started.v1,             class: fact,   tier: bus,       severity: info, existing: true, handlers: [H-ORC-01, H-RPT-01, H-PRJ-02] }
+  - { id: BP-A-05, type: ap.build.job.heartbeat.v1,              class: signal, tier: telemetry, severity: info, handlers: [] }
+  - { id: BP-A-06, type: ap.pipeline.job.lost.v1,                class: fact,   tier: bus,       severity: warn, existing: true, failure: true, diagClass: infra, handlers: [H-ORC-01, H-ORC-06] }
+  - { id: BP-A-07, type: ap.build.sandbox.destroyed.v1,          class: fact,   tier: bus,       severity: info, handlers: [H-SC-01, H-PRJ-02] }
+  - { id: BP-A-08, type: ap.pipeline.job.completed.v1,           class: fact,   tier: bus,       severity: info, existing: true, handlers: [H-ORC-01, H-DIAG-01, H-RPT-01, H-EXE-06, H-PRJ-02, H-PRJ-03] }
+
+  # B — source & workspace
+  - { id: BP-B-01, type: ap.build.source.checked_out.v1,         class: fact,   tier: bus,       severity: info, handlers: [H-SC-01, H-PRJ-02] }
+  - { id: BP-B-02, type: ap.build.source.checkout.failed.v1,     class: fact,   tier: bus,       severity: warn, failure: true, diagClass: infra|superseded, handlers: [H-DIAG-01, H-ORC-02] }
+  - { id: BP-B-03, type: ap.build.source.merge_ref.computed.v1,  class: fact,   tier: bus,       severity: info, failure: conditional, diagClass: config, handlers: [H-ORC-01, H-RPT-02] }
+  - { id: BP-B-04, type: ap.build.workspace.integrity.verified.v1, class: fact, tier: summary,   severity: info, handlers: [H-GATE-01, H-SC-01] }
+  - { id: BP-B-05, type: ap.build.source.change_set.computed.v1, class: fact,   tier: bus,       severity: info, handlers: [H-ORC-03, H-ORC-04] }
+
+  # C — toolchain & environment
+  - { id: BP-C-01, type: ap.build.toolchain.resolved.v1,         class: fact,   tier: bus,       severity: info, handlers: [H-SC-01, H-ORC-03] }
+  - { id: BP-C-02, type: ap.build.toolchain.install.failed.v1,   class: fact,   tier: bus,       severity: warn, failure: true, diagClass: toolchain, handlers: [H-DIAG-01, H-DIAG-05] }
+  - { id: BP-C-03, type: ap.build.toolchain.mismatch.detected.v1, class: signal, tier: bus,      severity: warn, handlers: [H-ORC-04, H-DIAG-05] }
+  - { id: BP-C-04, type: ap.build.toolchain.deprecated.detected.v1, class: signal, tier: bus,    severity: info, handlers: [H-DIAG-05, H-PRJ-03] }
+  - { id: BP-C-05, type: ap.build.environment.prepared.v1,       class: fact,   tier: summary,   severity: info, handlers: [H-SC-01, H-PRJ-02] }
+
+  # D — identity & secrets
+  - { id: BP-D-01, type: ap.build.identity.issued.v1,            class: fact,   tier: bus,       severity: info, handlers: [H-PLT-04] }
+  - { id: BP-D-02, type: ap.build.secret.granted.v1,             class: fact,   tier: bus,       severity: info, handlers: [H-PLT-04] }
+  - { id: BP-D-03, type: ap.build.secret.denied.v1,              class: fact,   tier: bus,       severity: warn, failure: true, diagClass: policy, handlers: [H-DIAG-01, H-RPT-02] }
+  - { id: BP-D-04, type: ap.build.secret.exposure.detected.v1,   class: signal, tier: bus,       severity: p0,   failure: true, diagClass: security, handlers: [H-SEC-01, H-RPT-03] }
+  - { id: BP-D-05, type: ap.build.credential.use.failed.v1,      class: fact,   tier: bus,       severity: warn, failure: true, diagClass: config, handlers: [H-DIAG-01] }
+
+  # E — dependencies
+  - { id: BP-E-01, type: ap.build.dependency.resolution.completed.v1, class: fact, tier: summary, severity: info, handlers: [H-SC-01, H-ORC-03, H-PRJ-02] }
+  - { id: BP-E-02, type: ap.build.dependency.fetch.failed.v1,    class: fact,   tier: bus,       severity: warn, failure: true, diagClass: infra|dependency, handlers: [H-DIAG-01, H-ORC-06] }
+  - { id: BP-E-03, type: ap.build.dependency.lockfile.drift.detected.v1, class: fact, tier: bus, severity: warn, failure: true, diagClass: dependency, handlers: [H-DIAG-01, H-DIAG-05] }
+  - { id: BP-E-04, type: ap.build.dependency.integrity.failed.v1, class: fact,  tier: bus,       severity: p0,   failure: true, diagClass: security, handlers: [H-SEC-02, H-RPT-03] }
+  - { id: BP-E-05, type: ap.build.dependency.conflict.detected.v1, class: fact, tier: bus,       severity: warn, failure: true, diagClass: dependency, handlers: [H-DIAG-01, H-DIAG-05] }
+  - { id: BP-E-06, type: ap.build.dependency.policy.violation.v1, class: fact,  tier: bus,       severity: warn, failure: true, diagClass: policy, handlers: [H-GATE-01, H-RPT-01] }
+  - { id: BP-E-07, type: ap.build.dependency.internal.consumed.v1, class: fact, tier: summary,   severity: info, handlers: [H-PRJ-09] }
+  - { id: BP-E-08, type: ap.build.dependency.vulnerable.detected.v1, class: fact, tier: summary, severity: warn, handlers: [H-GATE-01, H-DIAG-05] }
+
+  # F — caching
+  - { id: BP-F-01, type: ap.build.cache.restored.v1,             class: fact,   tier: summary,   severity: info, handlers: [H-PRJ-03, H-PRJ-06] }
+  - { id: BP-F-02, type: ap.build.cache.saved.v1,                class: fact,   tier: summary,   severity: info, handlers: [H-PRJ-03] }
+  - { id: BP-F-03, type: ap.build.cache.remote_exec.summary.v1,  class: signal, tier: summary,   severity: info, handlers: [H-PRJ-03, H-PRJ-04] }
+  - { id: BP-F-04, type: ap.build.cache.poisoning.suspected.v1,  class: signal, tier: bus,       severity: p0,   failure: true, diagClass: security, handlers: [H-SEC-03] }
+  - { id: BP-F-05, type: ap.build.cache.evicted.v1,              class: fact,   tier: telemetry, severity: info, handlers: [] }
+
+  # G — code generation
+  - { id: BP-G-01, type: ap.build.codegen.completed.v1,          class: fact,   tier: summary,   severity: info, handlers: [H-PRJ-02] }
+  - { id: BP-G-02, type: ap.build.codegen.drift.detected.v1,     class: fact,   tier: bus,       severity: warn, failure: true, diagClass: config, handlers: [H-DIAG-01, H-DIAG-05] }
+
+  # H — static checks
+  - { id: BP-H-01, type: ap.build.lint.completed.v1,             class: fact,   tier: summary,   severity: info, handlers: [H-GATE-01, H-RPT-01, H-DIAG-05] }
+  - { id: BP-H-02, type: ap.build.format.check.completed.v1,     class: fact,   tier: summary,   severity: info, failure: conditional, diagClass: config, handlers: [H-GATE-01, H-DIAG-05] }
+  - { id: BP-H-03, type: ap.build.typecheck.completed.v1,        class: fact,   tier: summary,   severity: info, failure: conditional, diagClass: code, handlers: [H-GATE-01, H-RPT-01, H-DIAG-01] }
+  - { id: BP-H-04, type: ap.build.static.baseline.regressed.v1,  class: signal, tier: bus,       severity: warn, handlers: [H-GATE-01] }
+
+  # I — compilation
+  - { id: BP-I-01, type: ap.build.compile.started.v1,            class: fact,   tier: telemetry, severity: info, handlers: [] }
+  - { id: BP-I-02, type: ap.build.compile.completed.v1,          class: fact,   tier: summary,   severity: info, failure: conditional, diagClass: code, handlers: [H-ORC-01, H-DIAG-01, H-RPT-01, H-PRJ-04] }
+  - { id: BP-I-03, type: ap.build.compile.error.classified.v1,   class: fact,   tier: bus,       severity: warn, failure: true, diagClass: code, handlers: [H-DIAG-01, H-RPT-01] }
+  - { id: BP-I-04, type: ap.build.compile.warnings.regressed.v1, class: signal, tier: bus,       severity: info, handlers: [H-GATE-01] }
+  - { id: BP-I-05, type: ap.build.compile.target.platform.completed.v1, class: fact, tier: summary, severity: info, handlers: [H-ORC-01, H-RPT-01] }
+
+  # J — testing
+  - { id: BP-J-01, type: ap.test.selection.computed.v1,          class: fact,   tier: summary,   severity: info, existing: true, handlers: [H-RPT-01, H-PRJ-02] }
+  - { id: BP-J-02, type: ap.build.test.services.started.v1,      class: fact,   tier: summary,   severity: info, handlers: [H-PRJ-02] }
+  - { id: BP-J-03, type: ap.build.test.services.failed.v1,       class: fact,   tier: bus,       severity: warn, failure: true, diagClass: infra, handlers: [H-DIAG-01, H-ORC-06] }
+  - { id: BP-J-04, type: ap.build.test.suite.completed.v1,       class: fact,   tier: summary,   severity: info, handlers: [H-GATE-01, H-RPT-01, H-PRJ-03] }
+  - { id: BP-J-05, type: ap.test.results.reported.v1,            class: fact,   tier: summary,   severity: info, existing: true, handlers: [H-DIAG-03, H-PRJ-03] }
+  - { id: BP-J-06, type: ap.build.test.case.failed.v1,           class: fact,   tier: bus,       severity: warn, failure: true, diagClass: test-assertion|test-flaky, cap: 50/job, handlers: [H-DIAG-01, H-DIAG-03, H-RPT-01] }
+  - { id: BP-J-07, type: ap.test.flake.detected.v1,              class: signal, tier: bus,       severity: warn, existing: true, handlers: [H-DIAG-04, H-ORC-06, H-RPT-03] }
+  - { id: BP-J-08, type: ap.build.test.coverage.reported.v1,     class: fact,   tier: summary,   severity: info, handlers: [H-GATE-01, H-RPT-01] }
+  - { id: BP-J-09, type: ap.build.test.contract.verified.v1,     class: fact,   tier: summary,   severity: info, handlers: [H-GATE-01, H-REL-01] }
+  - { id: BP-J-10, type: ap.build.test.performance.regressed.v1, class: signal, tier: bus,       severity: warn, handlers: [H-GATE-01, H-RPT-02] }
+  - { id: BP-J-11, type: ap.build.test.timeout.v1,               class: fact,   tier: bus,       severity: warn, failure: true, diagClass: timeout, handlers: [H-DIAG-01, H-DIAG-03] }
+
+  # K — security & compliance scanning
+  - { id: BP-K-01, type: ap.build.scan.sast.completed.v1,        class: fact,   tier: summary,   severity: info, handlers: [H-GATE-01, H-RPT-01] }
+  - { id: BP-K-02, type: ap.build.scan.sca.completed.v1,         class: fact,   tier: summary,   severity: info, handlers: [H-GATE-01, H-DIAG-05] }
+  - { id: BP-K-03, type: ap.build.scan.secrets.completed.v1,     class: fact,   tier: summary,   severity: info, handlers: [H-GATE-01] }
+  - { id: BP-K-04, type: ap.build.scan.iac.completed.v1,         class: fact,   tier: summary,   severity: info, handlers: [H-GATE-01, H-RPT-01] }
+  - { id: BP-K-05, type: ap.build.scan.license.completed.v1,     class: fact,   tier: summary,   severity: info, handlers: [H-GATE-01] }
+  - { id: BP-K-06, type: ap.build.scan.container.completed.v1,   class: fact,   tier: summary,   severity: info, handlers: [H-GATE-01, H-DIAG-05] }
+  - { id: BP-K-07, type: ap.build.scan.malware.suspected.v1,     class: signal, tier: bus,       severity: p0,   failure: true, diagClass: security, handlers: [H-SEC-02, H-RPT-03] }
+
+  # L — packaging & containerisation
+  - { id: BP-L-01, type: ap.build.package.created.v1,            class: fact,   tier: summary,   severity: info, handlers: [H-ORC-01] }
+  - { id: BP-L-02, type: ap.build.image.built.v1,                class: fact,   tier: summary,   severity: info, handlers: [H-SC-04] }
+  - { id: BP-L-03, type: ap.build.image.index.assembled.v1,      class: fact,   tier: bus,       severity: info, handlers: [H-ORC-01, H-SC-01] }
+  - { id: BP-L-04, type: ap.build.version.computed.v1,           class: fact,   tier: bus,       severity: info, handlers: [H-REL-01, H-ORC-01] }
+  - { id: BP-L-05, type: ap.build.reproducibility.checked.v1,    class: fact,   tier: summary,   severity: info, handlers: [H-PRJ-03] }
+  - { id: BP-L-06, type: ap.artifact.built.v1,                   class: fact,   tier: bus,       severity: info, existing: true, handlers: [H-SC-01, H-ORC-01] }
+
+  # M — supply chain
+  - { id: BP-M-01, type: ap.artifact.sbom.generated.v1,          class: fact,   tier: bus,       severity: info, existing: true, handlers: [H-SC-02, H-SC-03] }
+  - { id: BP-M-02, type: ap.artifact.provenance.generated.v1,    class: fact,   tier: bus,       severity: info, existing: true, handlers: [H-SC-02, H-GATE-01] }
+  - { id: BP-M-03, type: ap.artifact.signed.v1,                  class: fact,   tier: bus,       severity: info, existing: true, handlers: [H-GATE-01, H-ORC-01] }
+  - { id: BP-M-04, type: ap.build.attestation.failed.v1,         class: fact,   tier: bus,       severity: warn, failure: true, diagClass: infra|policy, handlers: [H-DIAG-01, H-ORC-01] }
+  - { id: BP-M-05, type: ap.build.vex.generated.v1,              class: fact,   tier: summary,   severity: info, handlers: [H-SC-03] }
+
+  # N — publishing
+  - { id: BP-N-01, type: ap.build.publish.requested.v1,          class: intent, tier: bus,       severity: info, handlers: [H-EXE-05] }
+  - { id: BP-N-02, type: ap.artifact.published.v1,               class: fact,   tier: bus,       severity: info, existing: true, handlers: [H-RTE-03, H-REL-01, H-PRJ-09] }
+  - { id: BP-N-03, type: ap.build.publish.failed.v1,             class: fact,   tier: bus,       severity: warn, failure: true, diagClass: config|infra, handlers: [H-DIAG-01, H-DIAG-05] }
+  - { id: BP-N-04, type: ap.build.docs.published.v1,             class: fact,   tier: summary,   severity: info, handlers: [H-RPT-02] }
+
+  # O — resource & performance
+  - { id: BP-O-01, type: ap.build.resources.reported.v1,         class: fact,   tier: summary,   severity: info, handlers: [H-PRJ-04, H-PRJ-06] }
+  - { id: BP-O-02, type: ap.build.resource.exhausted.v1,         class: fact,   tier: bus,       severity: warn, failure: true, diagClass: resource, handlers: [H-DIAG-01, H-ORC-06, H-DIAG-05] }
+  - { id: BP-O-03, type: ap.build.duration.regressed.v1,         class: signal, tier: bus,       severity: info, handlers: [H-RPT-03] }
+  - { id: BP-O-04, type: ap.build.queue.wait.reported.v1,        class: fact,   tier: summary,   severity: info, handlers: [H-PRJ-06] }
+
+  # P — anomaly & health
+  - { id: BP-P-01, type: ap.build.step.hung.detected.v1,         class: signal, tier: bus,       severity: warn, failure: true, diagClass: timeout, handlers: [H-ORC-07, H-DIAG-01] }
+  - { id: BP-P-02, type: ap.build.network.egress.denied.v1,      class: signal, tier: bus,       severity: warn, failure: conditional, diagClass: config|security, handlers: [H-SEC-04] }
+  - { id: BP-P-03, type: ap.build.nondeterminism.detected.v1,    class: signal, tier: bus,       severity: info, handlers: [H-PRJ-03, H-DIAG-05] }
+  - { id: BP-P-04, type: ap.build.health.degraded.v1,            class: signal, tier: bus,       severity: warn, handlers: [H-RPT-03] }
+  - { id: BP-P-05, type: ap.build.mainline.broken.v1,            class: fact,   tier: bus,       severity: p1,   handlers: [H-DIAG-08, H-RPT-03] }
+  - { id: BP-P-06, type: ap.build.mainline.recovered.v1,         class: fact,   tier: bus,       severity: info, handlers: [H-RPT-03, H-PRJ-03] }
+
+  # Q — control
+  - { id: BP-Q-01, type: ap.build.job.cancel.requested.v1,       class: intent, tier: bus,       severity: info, handlers: [H-ORC-08] }
+  - { id: BP-Q-02, type: ap.build.job.cancelled.v1,              class: fact,   tier: bus,       severity: info, handlers: [H-ORC-01, H-EXE-06, H-RPT-01] }
+  - { id: BP-Q-03, type: ap.build.job.timed_out.v1,              class: fact,   tier: bus,       severity: warn, failure: true, diagClass: timeout, handlers: [H-DIAG-01, H-EXE-06] }
+  - { id: BP-Q-04, type: ap.pipeline.job.retry.requested.v1,     class: intent, tier: bus,       severity: info, existing: true, handlers: [H-ORC-01] }
+  - { id: BP-Q-05, type: ap.build.step.retried.v1,               class: fact,   tier: summary,   severity: info, handlers: [H-PRJ-03] }
