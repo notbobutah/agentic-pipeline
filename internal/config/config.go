@@ -32,6 +32,16 @@ type Identity struct {
 	GitHub string `yaml:"github"`
 }
 
+type Feed struct {
+	Repo   string `yaml:"repo"`   // owner/name hosting the feed branch
+	Branch string `yaml:"branch"` // orphan branch with the latest snapshot
+}
+
+// URL is where the public page reads the feed.
+func (f Feed) URL() string {
+	return "https://raw.githubusercontent.com/" + f.Repo + "/" + f.Branch + "/index.json"
+}
+
 type Config struct {
 	Tenant             string               `yaml:"tenant"`
 	Team               string               `yaml:"team"`
@@ -42,6 +52,7 @@ type Config struct {
 	Components         map[string]Component `yaml:"components"`
 	DependencyOrder    []string             `yaml:"dependencyOrder"`
 	Agents             Agents               `yaml:"agents"`
+	Feed               Feed                 `yaml:"feed"`
 
 	// BaseDir is the directory relative paths resolve against (the repo root).
 	BaseDir string `yaml:"-"`

@@ -1,0 +1,20 @@
+{
+  "key": "DEMO-4",
+  "issueType": "Story",
+  "summary": "Inventory levels across data and web",
+  "assignee": "pipeline-agent",
+  "sponsor": "rob",
+  "priority": "Medium",
+  "components": ["data", "web"],
+  "description": "Add per-product inventory to the data layer and show low-stock warnings on the catalog. A two-repo change: the data must land first and the web change must pin to it.",
+  "acceptanceCriteria": [
+    "AC1: PGDataLayer adds an inventory schema and data file with a quantity for every product, validated like the other datasets, including that every productId exists.",
+    "AC2: PGDataLayer's generated types include the inventory type and CI fails if they are stale.",
+    "AC3: /catalog shows a 'low stock' badge for quantity 1-5 and 'out of stock' for 0, using the inventory data.",
+    "AC4: GoReactChat web builds and its tests pass against the PGDataLayer commit from the same change."
+  ],
+  "guidance": [
+    "Keep inventory in its own file rather than adding fields to products.json.",
+    "Follow the conventions DEMO-1 established in both repos."
+  ]
+}

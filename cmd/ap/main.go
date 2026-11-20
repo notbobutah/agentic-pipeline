@@ -7,6 +7,7 @@
 //	ap plan show <KEY> [-v N] [--diff]
 //	ap approve <KEY> | ap revise <KEY> <feedback> | ap reject <KEY> | ap cancel <KEY>
 //	ap status <KEY> | ap timeline <KEY> | ap events [-n N]
+//	ap feed build [--out DIR] | ap feed publish   public JSON snapshots for /pipeline
 //
 // Environment: AP_CONFIG (demo/config.yaml), AP_CATALOG (demo/catalog.yaml),
 // AP_USER (tracker identity; default $USER), AP_FAKE_AGENT=1 (fixture agent),
@@ -26,10 +27,12 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/notbobutah/agentic-pipeline/internal/agent"
 	"github.com/notbobutah/agentic-pipeline/internal/config"
 	"github.com/notbobutah/agentic-pipeline/internal/event"
+	"github.com/notbobutah/agentic-pipeline/internal/feed"
 	"github.com/notbobutah/agentic-pipeline/internal/work"
 )
 
@@ -88,7 +91,7 @@ func open() (*app, error) {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: ap <serve|card|plan|approve|revise|reject|cancel|status|timeline|events> ...")
+		return errors.New("usage: ap <serve|card|plan|approve|revise|reject|cancel|status|timeline|events|feed> ...")
 	}
 	a, err := open()
 	if err != nil {
@@ -153,6 +156,8 @@ func run(args []string) error {
 			return err
 		}
 		return a.timeline(ctx, rest[0])
+	case "feed":
+		return a.feedCmd(ctx, rest)
 	case "events":
 		fs := flag.NewFlagSet("events", flag.ContinueOnError)
 		n := fs.Int("n", 30, "last N events")
@@ -172,30 +177,116 @@ func (a *app) comment(ctx context.Context, key, body string) error {
 	return nil
 }
 
-func (a *app) serve(ctx context.Context, args []string) error {
-	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
-	once := fs.Bool("once", false, "process until idle, then exit")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	var runner agent.Runner
+func (a *app) runner() agent.Runner {
 	if os.Getenv("AP_FAKE_AGENT") != "" {
-		runner = &agent.Fake{Dir: a.cfg.Path("demo/fixtures"), Log: a.log}
 		a.log.Info("using fixture agent (AP_FAKE_AGENT)")
-	} else {
-		runner = &agent.Docker{Image: a.cfg.Agents.Image, Auth: env("AP_AGENT_AUTH", a.cfg.Agents.Auth), StateDir: a.cfg.StatePath(), Log: a.log}
+		return &agent.Fake{Dir: a.cfg.Path("demo/fixtures"), Log: a.log}
 	}
-	deps := &work.Deps{Store: a.store, Cfg: a.cfg, Agent: runner, Log: a.log}
-	fast := &event.Dispatcher{Store: a.store, Log: a.log, Handlers: []event.Handler{
+	return &agent.Docker{Image: a.cfg.Agents.Image, Auth: env("AP_AGENT_AUTH", a.cfg.Agents.Auth), StateDir: a.cfg.StatePath(), Log: a.log}
+}
+
+// dispatchers builds the handler groups: fast routing/state handlers, and the
+// agent invokers (slow) in their own group so they never block routing.
+func (a *app) dispatchers(r agent.Runner) (fast, agents *event.Dispatcher) {
+	deps := &work.Deps{Store: a.store, Cfg: a.cfg, Agent: r, Log: a.log}
+	fast = &event.Dispatcher{Store: a.store, Log: a.log, Handlers: []event.Handler{
 		work.IntakeRouter{Deps: deps},
 		work.CommentParser{Deps: deps},
 		work.Orchestrator{Deps: deps},
 		work.PlanApproval{Deps: deps},
 		work.Reporter{Deps: deps, Dir: a.cfg.Path("demo/cards")},
 	}}
-	agents := &event.Dispatcher{Store: a.store, Log: a.log, Handlers: []event.Handler{
+	agents = &event.Dispatcher{Store: a.store, Log: a.log, Handlers: []event.Handler{
 		work.Planner{Deps: deps},
 	}}
+	return fast, agents
+}
+
+func (a *app) pipelineInfo(groups ...*event.Dispatcher) feed.Pipeline {
+	p := feed.Pipeline{Name: "agentic-pipeline", Repo: "https://github.com/notbobutah/agentic-pipeline"}
+	if cat, err := event.LoadCatalog(a.cfg.Path(env("AP_CATALOG", "demo/catalog.yaml"))); err == nil {
+		p.CatalogTypes = cat.Len()
+	}
+	for _, g := range groups {
+		for _, h := range g.Handlers {
+			id, name, _ := strings.Cut(h.Name(), ".")
+			p.Handlers = append(p.Handlers, feed.HandlerInfo{ID: id, Name: name})
+		}
+	}
+	names := make([]string, 0, len(a.cfg.Components))
+	for n := range a.cfg.Components {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		c := a.cfg.Components[n]
+		p.Components = append(p.Components, feed.Component{Name: n, Repo: c.Repo, Root: c.Root})
+	}
+	return p
+}
+
+func (a *app) publisher() *feed.Publisher {
+	return &feed.Publisher{
+		Dir:    a.cfg.StatePath("feed"),
+		Remote: "https://github.com/" + a.cfg.Feed.Repo + ".git",
+		Branch: a.cfg.Feed.Branch,
+	}
+}
+
+// publishFeed builds the snapshot into the feed worktree and pushes it.
+func (a *app) publishFeed(ctx context.Context, info feed.Pipeline) error {
+	if a.cfg.Feed.Repo == "" || a.cfg.Feed.Branch == "" {
+		return errors.New("feed.repo and feed.branch must be set in the config")
+	}
+	pub := a.publisher()
+	if err := pub.Init(ctx); err != nil {
+		return err
+	}
+	idx, err := feed.Build(ctx, a.store, a.cfg, info, pub.Dir)
+	if err != nil {
+		return err
+	}
+	if err := pub.Publish(ctx); err != nil {
+		return err
+	}
+	a.log.Info("feed published", "cards", len(idx.Cards), "url", a.cfg.Feed.URL())
+	return nil
+}
+
+func (a *app) feedCmd(ctx context.Context, args []string) error {
+	if len(args) == 0 {
+		return errors.New("usage: ap feed build [--out DIR] | ap feed publish")
+	}
+	fast, agents := a.dispatchers(nil)
+	info := a.pipelineInfo(fast, agents)
+	switch args[0] {
+	case "build":
+		fs := flag.NewFlagSet("feed build", flag.ContinueOnError)
+		out := fs.String("out", a.cfg.StatePath("feed-local"), "output directory")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		idx, err := feed.Build(ctx, a.store, a.cfg, info, *out)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("feed: %d card(s) → %s\n", len(idx.Cards), *out)
+		return nil
+	case "publish":
+		return a.publishFeed(ctx, info)
+	}
+	return fmt.Errorf("unknown feed subcommand %q", args[0])
+}
+
+func (a *app) serve(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
+	once := fs.Bool("once", false, "process until idle, then exit")
+	publish := fs.Bool("publish-feed", false, "publish the public feed when the log changes")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	fast, agents := a.dispatchers(a.runner())
+	info := a.pipelineInfo(fast, agents)
 	if *once {
 		for {
 			p1, err := fast.Step(ctx)
@@ -207,18 +298,47 @@ func (a *app) serve(ctx context.Context, args []string) error {
 				return err
 			}
 			if !p1 && !p2 {
-				return nil
+				break
 			}
 		}
+		if *publish {
+			return a.publishFeed(ctx, info)
+		}
+		return nil
 	}
-	a.log.Info("serving", "events", a.cfg.StatePath("events.db"))
+	a.log.Info("serving", "events", a.cfg.StatePath("events.db"), "publishFeed", *publish)
 	var wg sync.WaitGroup
 	for _, d := range []*event.Dispatcher{fast, agents} {
 		wg.Add(1)
 		go func(d *event.Dispatcher) { defer wg.Done(); _ = d.Run(ctx) }(d)
 	}
+	if *publish {
+		wg.Add(1)
+		go func() { defer wg.Done(); a.feedLoop(ctx, info) }()
+	}
 	wg.Wait()
 	return nil
+}
+
+// feedLoop publishes at most every 15s, and only when events or telemetry changed.
+func (a *app) feedLoop(ctx context.Context, info feed.Pipeline) {
+	t := time.NewTicker(15 * time.Second)
+	defer t.Stop()
+	var lastE, lastT int64 = -1, -1
+	for {
+		if e, tl, err := a.store.Head(ctx); err == nil && (e != lastE || tl != lastT) {
+			if err := a.publishFeed(ctx, info); err != nil {
+				a.log.Error("feed publish", "err", err)
+			} else {
+				lastE, lastT = e, tl
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
 }
 
 func (a *app) load(ctx context.Context, key string) (*work.State, error) {

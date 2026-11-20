@@ -204,6 +204,25 @@ cat demo/cards/DEMO-1.activity.md       # the "Jira comments"
 - State lives in `.ap/` (event log `events.db`, agent task dirs `tasks/<id>/` with `task.json` and `result.json`). Delete it to start over.
 - `go test ./...` covers envelope and idempotency, the catalog gate, plan validation, and the full intake → plan → revise → approve flow, including a full-log replay that must add zero events.
 
+### Public view: `/pipeline`
+
+`ap serve --publish-feed` (or a one-off `ap feed publish`) builds JSON snapshots of the event log and agent telemetry, and force-pushes them as one commit to the orphan `feed` branch of this repo. GoReactChat's `/pipeline` page fetches them from `raw.githubusercontent.com/notbobutah/agentic-pipeline/feed/index.json` (CORS `*`, CDN cache up to 5 minutes) and renders:
+- cards, a stage tracker, the agents (role, turns, tool calls, spend), plans and a plain-English event log;
+- **replay** of any recorded run, re-rendering the same projection over a growing prefix of the log.
+
+The page is read-only. Runs are started from the CLI and plans are approved by the sponsor. `ap feed build --out DIR` writes the snapshot locally for page development.
+
+### Example cards
+
+| Card | Repos | Builds on |
+|------|-------|-----------|
+| `DEMO-1` Product catalog page backed by PGDataLayer | data + web | — |
+| `DEMO-2` Search and category filter on /catalog | web | DEMO-1 |
+| `DEMO-3` Product detail page `/catalog/[id]` | web | DEMO-1 |
+| `DEMO-4` Inventory levels across data and web | data + web | DEMO-1 |
+
+Run them in order with `ap card submit demo/cards/DEMO-N.json`. Until P2 lands, a card stops after plan approval.
+
 **P1 status (2026-11-20):** done. Real planner runs work through the sandbox with `claude-login` auth.
 
 ## 11. Risks

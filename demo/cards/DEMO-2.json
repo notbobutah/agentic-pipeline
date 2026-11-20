@@ -1,0 +1,20 @@
+{
+  "key": "DEMO-2",
+  "issueType": "Story",
+  "summary": "Search and category filter on the catalog page",
+  "assignee": "pipeline-agent",
+  "sponsor": "rob",
+  "priority": "Medium",
+  "components": ["web"],
+  "description": "Visitors to /catalog should be able to narrow the list by typing a search term and by choosing a category. Builds on DEMO-1.",
+  "acceptanceCriteria": [
+    "AC1: /catalog has a text search that filters products by name and description, case-insensitively, as the visitor types.",
+    "AC2: /catalog has a category filter (all + one option per category) that combines with the search.",
+    "AC3: The filter state is reflected in the URL query string so a filtered view can be shared.",
+    "AC4: Unit tests cover the filtering function, including combined search + category and the empty-result message."
+  ],
+  "guidance": [
+    "Keep the page statically rendered; do filtering on the client in a small client component.",
+    "Do not add a UI library; use the existing Tailwind classes."
+  ]
+}

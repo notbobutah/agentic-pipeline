@@ -32,6 +32,14 @@ CREATE TABLE IF NOT EXISTS events (
 );
 CREATE INDEX IF NOT EXISTS events_corr ON events(correlationid, seq);
 CREATE INDEX IF NOT EXISTS events_type ON events(type, seq);
+CREATE TABLE IF NOT EXISTS telemetry (
+  seq            INTEGER PRIMARY KEY AUTOINCREMENT,
+  correlationid  TEXT NOT NULL,
+  task           TEXT NOT NULL,
+  time           TEXT NOT NULL,
+  body           TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS telemetry_corr ON telemetry(correlationid, seq);
 CREATE TABLE IF NOT EXISTS offsets (
   consumer TEXT PRIMARY KEY,
   seq      INTEGER NOT NULL
@@ -151,4 +159,75 @@ func (s *Store) Commit(ctx context.Context, consumer string, seq int64) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO offsets(consumer, seq) VALUES(?, ?) ON CONFLICT(consumer) DO UPDATE SET seq = excluded.seq`, consumer, seq)
 	return err
+}
+
+// Telemetry is tier-T data (docs/12 §3): high-volume agent progress that is
+// not a bus event and no handler may subscribe to. The feed shows it live.
+type Telemetry struct {
+	Seq           int64           `json:"seq"`
+	CorrelationID string          `json:"-"`
+	Task          string          `json:"task"`
+	Time          string          `json:"time"`
+	Body          json.RawMessage `json:"body"`
+}
+
+// AddTelemetry records one progress line (must be a JSON object).
+func (s *Store) AddTelemetry(ctx context.Context, corr, task string, body []byte) error {
+	if !json.Valid(body) {
+		b, _ := json.Marshal(map[string]string{"kind": "raw", "text": string(body)})
+		body = b
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO telemetry(correlationid, task, time, body) VALUES(?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'),?)`, corr, task, string(body))
+	return err
+}
+
+// TelemetryFor returns a correlation's telemetry in order.
+func (s *Store) TelemetryFor(ctx context.Context, corr string) ([]Telemetry, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT seq, task, time, body FROM telemetry WHERE correlationid = ? ORDER BY seq`, corr)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Telemetry
+	for rows.Next() {
+		var t Telemetry
+		var body string
+		if err := rows.Scan(&t.Seq, &t.Task, &t.Time, &body); err != nil {
+			return nil, err
+		}
+		t.Body = json.RawMessage(body)
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// Correlations lists distinct correlation ids with their last event seq.
+func (s *Store) Correlations(ctx context.Context) (map[string]int64, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT correlationid, MAX(seq) FROM events GROUP BY correlationid`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]int64{}
+	for rows.Next() {
+		var c string
+		var n int64
+		if err := rows.Scan(&c, &n); err != nil {
+			return nil, err
+		}
+		out[c] = n
+	}
+	return out, rows.Err()
+}
+
+// Head returns the highest event and telemetry seq (a cheap change detector).
+func (s *Store) Head(ctx context.Context) (int64, int64, error) {
+	var e, t sql.NullInt64
+	if err := s.db.QueryRowContext(ctx, `SELECT MAX(seq) FROM events`).Scan(&e); err != nil {
+		return 0, 0, err
+	}
+	if err := s.db.QueryRowContext(ctx, `SELECT MAX(seq) FROM telemetry`).Scan(&t); err != nil {
+		return 0, 0, err
+	}
+	return e.Int64, t.Int64, nil
 }

@@ -41,6 +41,10 @@ type Task struct {
 	MaxBudgetUSD float64
 	OutputSchema map[string]any
 	Repos        []Repo
+
+	// Progress receives each JSONL progress line the runner prints (tier-T
+	// telemetry). Optional.
+	Progress func(line []byte)
 }
 
 // Result is what the runner reports.
@@ -151,6 +155,9 @@ func (d *Docker) Run(ctx context.Context, t Task) (*Result, error) {
 	sc.Buffer(make([]byte, 1<<20), 1<<20)
 	for sc.Scan() {
 		d.Log.Debug("agent", "task", t.ID, "line", sc.Text())
+		if t.Progress != nil {
+			t.Progress(append([]byte(nil), sc.Bytes()...))
+		}
 	}
 	waitErr := cmd.Wait()
 
@@ -254,6 +261,13 @@ func (f *Fake) Run(_ context.Context, t Task) (*Result, error) {
 	}
 	if f.Log != nil {
 		f.Log.Info("fake agent", "task", t.ID, "role", t.Role)
+	}
+	if t.Progress != nil {
+		t.Progress([]byte(`{"kind":"status","status":"started","role":"` + t.Role + `","model":"fixture"}`))
+		for _, tool := range []string{"Glob", "Read", "Read", "Grep"} {
+			t.Progress([]byte(`{"kind":"tool","name":"` + tool + `"}`))
+		}
+		t.Progress([]byte(`{"kind":"status","status":"done","subtype":"success"}`))
 	}
 	return &Result{Subtype: "success", Structured: b, CostUSD: 0, Turns: 1}, nil
 }

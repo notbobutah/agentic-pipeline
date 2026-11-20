@@ -59,6 +59,11 @@ func (h Planner) Handle(ctx context.Context, e *event.Event) ([]*event.Event, er
 			SystemPrompt: plannerSystemPrompt, Prompt: plannerPrompt(st, req, problems, h.Deps),
 			Tools: []string{"Read", "Glob", "Grep"}, MaxTurns: role.MaxTurns, MaxBudgetUSD: role.MaxBudgetUSD,
 			OutputSchema: PlanSchema(),
+			Progress: func(line []byte) {
+				if err := h.Store.AddTelemetry(ctx, e.CorrelationID, taskID, line); err != nil {
+					h.Log.Warn("telemetry", "err", err)
+				}
+			},
 		}
 		for _, r := range st.Repos {
 			task.Repos = append(task.Repos, agent.Repo{Name: r.Component, Slug: r.Repo, ReadOnly: true})

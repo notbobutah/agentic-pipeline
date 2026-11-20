@@ -1,0 +1,19 @@
+{
+  "key": "DEMO-3",
+  "issueType": "Story",
+  "summary": "Product detail page",
+  "assignee": "pipeline-agent",
+  "sponsor": "rob",
+  "priority": "Medium",
+  "components": ["web"],
+  "description": "Each product on /catalog links to its own page with the full details. Builds on DEMO-1.",
+  "acceptanceCriteria": [
+    "AC1: /catalog/[id] renders a product's name, category, description, price and stock state, statically generated for every product in pgdatalayer.",
+    "AC2: An unknown id returns the Next.js not-found page.",
+    "AC3: Product cards on /catalog link to their detail page, and the detail page links back to its category on /catalog.",
+    "AC4: Tests cover the lookup by id and the not-found case."
+  ],
+  "guidance": [
+    "Use generateStaticParams from the package data; no runtime fetching."
+  ]
+}

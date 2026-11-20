@@ -28,3 +28,7 @@ agents:
   auth: api-key                  # api-key (ANTHROPIC_API_KEY) | claude-login (~/.claude/.credentials.json)
   roles:
     implementation-planner: { maxTurns: 60, maxBudgetUsd: 4 }
+
+feed:                            # public JSON snapshots for the /pipeline page
+  repo: notbobutah/agentic-pipeline
+  branch: feed
