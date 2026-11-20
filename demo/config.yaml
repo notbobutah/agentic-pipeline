@@ -14,11 +14,18 @@ components:                      # Jira component → repo + scope envelope ceil
     root: .
     paths: ["**"]
     forbidden: [".github/**", ".agentic/**"]
+    checks: [pgdatalayer]
+    innerLoop: ["npm ci", "npm test", "npm run check --if-present"]
   web:
     repo: notbobutah/GoReactChat
     root: web
     paths: ["web/**"]
     forbidden: [".github/**", ".agentic/**", "server/**", "deploy/**", "migrations/**", "proto/**"]
+    checks: [web-ci, "web (Next.js client)"]
+    innerLoop: ["cd web && npm ci", "cd web && npm run lint", "cd web && npm run typecheck", "cd web && npm test --if-present", "cd web && npm run build"]
+    dependsOn:
+      data: { package: pgdatalayer, spec: "github:notbobutah/PGDataLayer#{sha}" }
+    deploy: deploy-dev.yml
 
 dependencyOrder: [data, web]     # producer first: merge order and version pinning
 
@@ -28,6 +35,13 @@ agents:
   auth: api-key                  # api-key (ANTHROPIC_API_KEY) | claude-login (~/.claude/.credentials.json)
   roles:
     implementation-planner: { maxTurns: 60, maxBudgetUsd: 4 }
+    test-author:            { maxTurns: 80, maxBudgetUsd: 4 }
+    coding:                 { maxTurns: 150, maxBudgetUsd: 10 }
+    coding-fix:             { maxTurns: 80, maxBudgetUsd: 5 }
+
+sessions:
+  maxIterations: 5               # outer-loop fixes before escalating to the sponsor
+  reviewers: [notbobutah]        # GitHub users asked to review when a changeset is ready
 
 feed:                            # public JSON snapshots for the /pipeline page
   repo: notbobutah/agentic-pipeline

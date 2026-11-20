@@ -18,6 +18,8 @@ interface Task {
   systemPrompt: string;
   prompt: string;
   tools: string[];
+  /** Permission rules auto-approved (e.g. "Bash(npm:*)"); defaults to `tools`. */
+  allowedTools?: string[];
   cwd: string;
   maxTurns: number;
   maxBudgetUsd: number;
@@ -56,7 +58,7 @@ async function main(): Promise<number> {
         // `tools` limits what exists; `allowedTools` pre-approves it. With
         // permissionMode "dontAsk" anything else is denied, never prompted.
         tools: task.tools,
-        allowedTools: task.tools,
+        allowedTools: task.allowedTools ?? task.tools,
         permissionMode: "dontAsk",
         maxTurns: task.maxTurns,
         maxBudgetUsd: task.maxBudgetUsd,
@@ -76,9 +78,13 @@ async function main(): Promise<number> {
       }
     }
   } catch (err) {
-    await write({ subtype: "error_during_execution", isError: true, errors: [String(err)], durationMs: Date.now() - started });
-    progress({ kind: "status", status: "failed", error: String(err) });
-    return 1;
+    // The SDK throws after an error result (budget, turns, ...). If that
+    // result arrived first, report it faithfully (subtype, cost, turns).
+    if (!final) {
+      await write({ subtype: "error_during_execution", isError: true, errors: [String(err)], durationMs: Date.now() - started });
+      progress({ kind: "status", status: "failed", error: String(err) });
+      return 1;
+    }
   }
 
   if (!final) {

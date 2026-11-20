@@ -14,6 +14,39 @@ type Component struct {
 	Root      string   `yaml:"root"`      // project directory inside the repo
 	Paths     []string `yaml:"paths"`     // scope-envelope ceiling (globs)
 	Forbidden []string `yaml:"forbidden"` // never writable by agents
+	Checks    []string `yaml:"checks"`    // CI check names that verify this component
+	// DependsOn pins a producer component's package to the producer change's
+	// commit (docs/15 §5): {component: {package, spec}} where spec contains {sha}.
+	DependsOn map[string]Dependency `yaml:"dependsOn"`
+	// Deploy names the workflow whose run on the merge commit is this
+	// component's deployment (empty = not deployed).
+	Deploy    string   `yaml:"deploy"`
+	InnerLoop []string `yaml:"innerLoop"` // commands the agents must pass locally
+}
+
+type Dependency struct {
+	Package string `yaml:"package"`
+	Spec    string `yaml:"spec"`
+}
+
+// Order returns components sorted by DependencyOrder (producers first).
+func (c *Config) Order(members []string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, d := range c.DependencyOrder {
+		for _, m := range members {
+			if m == d && !seen[m] {
+				out = append(out, m)
+				seen[m] = true
+			}
+		}
+	}
+	for _, m := range members {
+		if !seen[m] {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 type Role struct {
@@ -30,6 +63,11 @@ type Agents struct {
 
 type Identity struct {
 	GitHub string `yaml:"github"`
+}
+
+type Sessions struct {
+	MaxIterations int      `yaml:"maxIterations"`
+	Reviewers     []string `yaml:"reviewers"`
 }
 
 type Feed struct {
@@ -53,6 +91,7 @@ type Config struct {
 	DependencyOrder    []string             `yaml:"dependencyOrder"`
 	Agents             Agents               `yaml:"agents"`
 	Feed               Feed                 `yaml:"feed"`
+	Sessions           Sessions             `yaml:"sessions"`
 
 	// BaseDir is the directory relative paths resolve against (the repo root).
 	BaseDir string `yaml:"-"`

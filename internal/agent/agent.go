@@ -21,12 +21,15 @@ import (
 	"time"
 )
 
-// Repo is a repository checkout made available to the agent.
+// Repo is a repository checkout made available to the agent. Either the
+// gateway clones Slug (read-only planning), or HostDir is an existing writable
+// workspace owned by a coding session.
 type Repo struct {
 	Name     string // directory name under /work/repos
 	Slug     string // owner/name on GitHub
 	Ref      string // branch or SHA; empty = default branch
 	ReadOnly bool
+	HostDir  string // existing checkout to mount read-write (coding sessions)
 }
 
 // Task is one agent invocation.
@@ -36,7 +39,8 @@ type Task struct {
 	Model        string
 	SystemPrompt string
 	Prompt       string
-	Tools        []string // available and auto-allowed tools
+	Tools        []string // tools that exist for the agent
+	AllowedTools []string // permission rules auto-approved; empty = Tools. Anything else is denied.
 	MaxTurns     int
 	MaxBudgetUSD float64
 	OutputSchema map[string]any
@@ -77,6 +81,7 @@ type runnerTask struct {
 	SystemPrompt string         `json:"systemPrompt"`
 	Prompt       string         `json:"prompt"`
 	Tools        []string       `json:"tools"`
+	AllowedTools []string       `json:"allowedTools,omitempty"`
 	Cwd          string         `json:"cwd"`
 	MaxTurns     int            `json:"maxTurns"`
 	MaxBudgetUSD float64        `json:"maxBudgetUsd"`
@@ -110,13 +115,19 @@ func (d *Docker) Run(ctx context.Context, t Task) (*Result, error) {
 		return nil, err
 	}
 	for _, r := range t.Repos {
+		if r.HostDir != "" {
+			if err := os.MkdirAll(filepath.Join(dir, "repos", r.Name), 0o755); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		if err := clone(ctx, r, filepath.Join(dir, "repos", r.Name)); err != nil {
 			return nil, err
 		}
 	}
 	rt := runnerTask{
 		Role: t.Role, Model: t.Model, SystemPrompt: t.SystemPrompt, Prompt: t.Prompt,
-		Tools: t.Tools, Cwd: "/work/repos", MaxTurns: t.MaxTurns, MaxBudgetUSD: t.MaxBudgetUSD,
+		Tools: t.Tools, AllowedTools: t.AllowedTools, Cwd: "/work/repos", MaxTurns: t.MaxTurns, MaxBudgetUSD: t.MaxBudgetUSD,
 		OutputSchema: t.OutputSchema,
 	}
 	if err := writeJSON(filepath.Join(dir, "task.json"), rt); err != nil {
@@ -128,7 +139,10 @@ func (d *Docker) Run(ctx context.Context, t Task) (*Result, error) {
 		"-e", "CLAUDE_AGENT_SDK_CLIENT_APP=agentic-pipeline/0.1",
 	}
 	for _, r := range t.Repos {
-		if r.ReadOnly {
+		switch {
+		case r.HostDir != "":
+			args = append(args, "-v", r.HostDir+":/work/repos/"+r.Name)
+		case r.ReadOnly:
 			args = append(args, "-v", filepath.Join(dir, "repos", r.Name)+":/work/repos/"+r.Name+":ro")
 		}
 	}
@@ -174,6 +188,26 @@ func (d *Docker) Run(ctx context.Context, t Task) (*Result, error) {
 	}
 	d.Log.Info("agent done", "task", t.ID, "subtype", res.Subtype, "turns", res.Turns, "costUsd", res.CostUSD)
 	return &res, nil
+}
+
+// Exec runs a deterministic command (no agent, no credentials) in the sandbox
+// image with hostDir mounted at /work/repo. Used for mechanical steps such as
+// re-pinning a dependency, so they run with the same toolchain as agents.
+func (d *Docker) Exec(ctx context.Context, hostDir, script string) (string, error) {
+	cmd := exec.CommandContext(ctx, "docker", "run", "--rm", "-v", hostDir+":/work/repo", "-w", "/work/repo",
+		"--entrypoint", "bash", d.Image, "-lc", script)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return string(out), fmt.Errorf("sandbox exec: %v: %s", err, tailString(string(out), 2000))
+	}
+	return string(out), nil
+}
+
+func tailString(s string, n int) string {
+	if len(s) > n {
+		return s[len(s)-n:]
+	}
+	return s
 }
 
 // auth returns docker args that give the container Anthropic credentials, and

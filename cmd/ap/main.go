@@ -33,6 +33,7 @@ import (
 	"github.com/notbobutah/agentic-pipeline/internal/config"
 	"github.com/notbobutah/agentic-pipeline/internal/event"
 	"github.com/notbobutah/agentic-pipeline/internal/feed"
+	"github.com/notbobutah/agentic-pipeline/internal/session"
 	"github.com/notbobutah/agentic-pipeline/internal/work"
 )
 
@@ -189,17 +190,30 @@ func (a *app) runner() agent.Runner {
 // agent invokers (slow) in their own group so they never block routing.
 func (a *app) dispatchers(r agent.Runner) (fast, agents *event.Dispatcher) {
 	deps := &work.Deps{Store: a.store, Cfg: a.cfg, Agent: r, Log: a.log}
+	sdeps := a.sessionDeps(r)
 	fast = &event.Dispatcher{Store: a.store, Log: a.log, Handlers: []event.Handler{
 		work.IntakeRouter{Deps: deps},
 		work.CommentParser{Deps: deps},
 		work.Orchestrator{Deps: deps},
 		work.PlanApproval{Deps: deps},
 		work.Reporter{Deps: deps, Dir: a.cfg.Path("demo/cards")},
+		session.FeedbackRouter{Deps: sdeps},
+		session.Coordinator{Deps: sdeps},
 	}}
 	agents = &event.Dispatcher{Store: a.store, Log: a.log, Handlers: []event.Handler{
 		work.Planner{Deps: deps},
+		session.Orchestrator{Deps: sdeps},
 	}}
 	return fast, agents
+}
+
+// sessionDeps wires coding sessions. Deterministic sandbox steps (dependency
+// re-pins) always use the real sandbox image, even with the fixture agent.
+func (a *app) sessionDeps(r agent.Runner) *session.Deps {
+	return &session.Deps{
+		Store: a.store, Cfg: a.cfg, Agent: r, Log: a.log,
+		Sandbox: &agent.Docker{Image: a.cfg.Agents.Image, StateDir: a.cfg.StatePath(), Log: a.log},
+	}
 }
 
 func (a *app) pipelineInfo(groups ...*event.Dispatcher) feed.Pipeline {
@@ -282,6 +296,7 @@ func (a *app) serve(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	once := fs.Bool("once", false, "process until idle, then exit")
 	publish := fs.Bool("publish-feed", false, "publish the public feed when the log changes")
+	noPoll := fs.Bool("no-poll", false, "do not poll GitHub for CI, reviews, merges and deploys")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -315,6 +330,11 @@ func (a *app) serve(ctx context.Context, args []string) error {
 	if *publish {
 		wg.Add(1)
 		go func() { defer wg.Done(); a.feedLoop(ctx, info) }()
+	}
+	if !*noPoll {
+		poller := &session.Poller{Deps: a.sessionDeps(nil)}
+		wg.Add(1)
+		go func() { defer wg.Done(); poller.Run(ctx) }()
 	}
 	wg.Wait()
 	return nil
