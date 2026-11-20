@@ -49,10 +49,13 @@ func (d *Deps) publish(ctx context.Context, cause *event.Event, typ, key string,
 	if err != nil {
 		return nil, err
 	}
-	if _, err := d.Store.Publish(ctx, e); err != nil {
+	n, err := d.Store.Publish(ctx, e)
+	if err != nil {
 		return nil, err
 	}
-	d.Log.Info("emit", "type", typ, "subject", cause.Subject, "key", key)
+	if n > 0 { // re-observing the same state (polling) is a silent no-op
+		d.Log.Info("emit", "type", typ, "subject", cause.Subject, "key", key)
+	}
 	return e, nil
 }
 

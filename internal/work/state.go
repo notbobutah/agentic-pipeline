@@ -23,6 +23,7 @@ const (
 	TPlanRejected       = "ap.work.plan.rejected.v1"
 	TWorkBlocked        = "ap.work.blocked.v1"
 	TWorkCancelled      = "ap.work.cancelled.v1"
+	TWorkCompleted      = "ap.work.completed.v1"
 	TCommandReceived    = "ap.command.received.v1"
 	TCommandAccepted    = "ap.command.accepted.v1"
 	TCommandRejected    = "ap.command.rejected.v1"
@@ -192,6 +193,7 @@ const (
 	StImplementing Status = "implementing"
 	StBlocked      Status = "blocked"
 	StCancelled    Status = "cancelled"
+	StDone         Status = "done"
 )
 
 // State is a work item rebuilt from its events. It is the durable-workflow
@@ -288,6 +290,8 @@ func Replay(evs []*event.Event) (*State, error) {
 			var d Reason
 			_ = e.Decode(&d)
 			s.Status, s.Reason = StCancelled, d.Reason
+		case TWorkCompleted:
+			s.Status, s.Reason = StDone, ""
 		case TAgentTaskCompleted:
 			var d AgentTaskCompleted
 			_ = e.Decode(&d)
