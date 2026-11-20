@@ -1,0 +1,96 @@
+{
+ "version": 1,
+ "generatedAt": "2026-11-24T19:53:03.568Z",
+ "pipeline": {
+  "name": "agentic-pipeline",
+  "repo": "https://github.com/notbobutah/agentic-pipeline",
+  "catalogTypes": 47,
+  "handlers": [
+   {
+    "id": "H-WRK-01",
+    "name": "work-intake-router"
+   },
+   {
+    "id": "H-WRK-02",
+    "name": "work-comment-parser"
+   },
+   {
+    "id": "H-WRK-03",
+    "name": "work-item-orchestrator"
+   },
+   {
+    "id": "H-WRK-05",
+    "name": "plan-approval-manager"
+   },
+   {
+    "id": "H-WRK-10",
+    "name": "work-reporter"
+   },
+   {
+    "id": "H-WRK-07",
+    "name": "feedback-router"
+   },
+   {
+    "id": "H-WRK-09",
+    "name": "changeset-coordinator"
+   },
+   {
+    "id": "H-WRK-03",
+    "name": "implementation-planner"
+   },
+   {
+    "id": "H-WRK-06",
+    "name": "session-orchestrator"
+   }
+  ],
+  "components": [
+   {
+    "name": "api",
+    "repo": "notbobutah/GoReactChat",
+    "root": "server"
+   },
+   {
+    "name": "data",
+    "repo": "notbobutah/PGDataLayer",
+    "root": "."
+   },
+   {
+    "name": "web",
+    "repo": "notbobutah/GoReactChat",
+    "root": "web"
+   }
+  ]
+ },
+ "cards": [
+  {
+   "key": "LIBRARY-1",
+   "summary": "Expona video portfolio on rob.expona.ai, served from the existing object store",
+   "status": "done",
+   "sponsor": "rob",
+   "components": [
+    "api",
+    "web"
+   ],
+   "costUsd": 5.6638451000000005,
+   "started": "2026-11-24T19:27:48.352Z",
+   "updated": "2026-11-24T19:52:49.476Z",
+   "events": 74,
+   "file": "cards/LIBRARY-1.json"
+  },
+  {
+   "key": "DEMO-1",
+   "summary": "Product catalog demo page backed by PGDataLayer",
+   "status": "done",
+   "sponsor": "rob",
+   "components": [
+    "data",
+    "web"
+   ],
+   "costUsd": 4.774090000000001,
+   "started": "2026-11-20T13:20:53.405Z",
+   "updated": "2026-11-20T15:22:52.015Z",
+   "events": 67,
+   "file": "cards/DEMO-1.json"
+  }
+ ]
+}
