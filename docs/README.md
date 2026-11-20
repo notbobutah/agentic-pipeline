@@ -38,6 +38,7 @@ The **event model is the spine of the system**. Every external stimulus (a Jira 
 | 11 | [Open Questions](11-open-questions.md) | Decisions still pending |
 | 12 | [Build Process Events](12-build-process-events.md) | The canonical build lifecycle and 95 typed events emitted inside a job (categories A–Q) |
 | 13 | [Event Handlers](13-event-handlers.md) | Handler registry: categories, subscriptions, idempotency, failure policy |
+| — | [demo/](demo/README.md) | **Demo plan:** two GitHub repos + one card, end to end |
 | — | [catalog/](catalog/) | Machine-readable `build-events.yaml`, `work-events.yaml`, `handlers.yaml` |
 | — | [Glossary](glossary.md) | Terms |
 | — | [ADRs](adr/) | Architecture Decision Records |
