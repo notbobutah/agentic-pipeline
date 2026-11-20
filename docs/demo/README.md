@@ -150,7 +150,7 @@ ap timeline DEMO-1                           # full correlated event tree
 Notes:
 - The CI workflows call **repo scripts** (`npm test`, `npm run check`). The agents write the tests and validators those scripts run (AC2, AC3, AC5), so CI starts trivially green and becomes meaningful as agents add work.
 - GoReactChat's existing `publish image` workflow also runs on PRs and builds the Go backend. The Feedback Router treats checks outside the change's affected project (`web`) as unrelated, so agents don't chase them.
-- **Merging the GoReactChat setup PR, and later the demo PR, triggers `deploy dev` to the live site.** The demo can stop at "ready for review" if you don't want the catalog page live.
+- **Deployment is in scope** (approved 2026-11-20): the demo runs through merge, and the `/catalog` page may go live. As of 2026-11-20, though, GoReactChat's `publish image` and `deploy dev` workflows are **disabled** (`disabled_manually`, last run 2026-08-16). Until they are re-enabled, a merge runs only `web ci`. Once enabled, the poller maps the `deploy dev` run to `ap.deployment.completed`, which closes the work item.
 
 ## 8. Build phases
 
