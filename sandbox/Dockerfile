@@ -16,5 +16,5 @@ RUN npx tsc && npm prune --omit=dev --no-audit --no-fund
 # Runs as the unprivileged image user (uid 1000). Task directories are bind
 # mounted at /work; credentials arrive as ANTHROPIC_API_KEY or a copied login.
 USER node
-ENV NODE_ENV=production
+# No NODE_ENV=production: agents run `npm ci` in target repos and need devDependencies.
 ENTRYPOINT ["node", "/opt/ap-runner/dist/index.js"]
