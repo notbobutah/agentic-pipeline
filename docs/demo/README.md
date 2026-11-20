@@ -179,7 +179,34 @@ sandbox/Dockerfile      node:24 + git + runner
 demo/                   cards/, config.yaml, catalog.yaml
 ```
 
-## 10. Risks
+## 10. Running it (P1)
+
+```bash
+go build -o bin/ap ./cmd/ap
+docker build -t ap-sandbox:node24 -f sandbox/Dockerfile .
+
+# Credentials for agent sandboxes (pick one):
+export ANTHROPIC_API_KEY=...            # agents.auth: api-key (default)
+export AP_AGENT_AUTH=claude-login       # or: copy ~/.claude/.credentials.json into each sandbox
+
+./bin/ap card submit demo/cards/DEMO-1.json
+./bin/ap serve                          # or `serve --once` to process until idle
+./bin/ap plan show DEMO-1
+./bin/ap revise DEMO-1 "feedback..."    # → plan v2
+./bin/ap plan show DEMO-1 --diff
+./bin/ap approve DEMO-1                 # only the card's sponsor; binds to the plan digest
+./bin/ap timeline DEMO-1                # causation tree of every event
+cat demo/cards/DEMO-1.activity.md       # the "Jira comments"
+```
+
+- `AP_FAKE_AGENT=1` uses `demo/fixtures/*.json` instead of the model (no cost).
+- `AP_USER=<name>` comments as another tracker user. Unmapped users are treated as context only.
+- State lives in `.ap/` (event log `events.db`, agent task dirs `tasks/<id>/` with `task.json` and `result.json`). Delete it to start over.
+- `go test ./...` covers envelope and idempotency, the catalog gate, plan validation, and the full intake → plan → revise → approve flow, including a full-log replay that must add zero events.
+
+**P1 status (2026-11-20):** done. Real planner runs work through the sandbox with `claude-login` auth.
+
+## 11. Risks
 
 | Risk | Mitigation |
 |------|------------|
