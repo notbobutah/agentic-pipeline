@@ -7,3 +7,7 @@ dist/
 *.db
 *.db-*
 .claude/settings.local.json
+.ap/
+demo/cards/*.activity.md
+runner/node_modules/
+runner/dist/

@@ -1,0 +1,22 @@
+{
+  "key": "DEMO-1",
+  "issueType": "Story",
+  "summary": "Product catalog demo page backed by PGDataLayer",
+  "assignee": "pipeline-agent",
+  "sponsor": "rob",
+  "priority": "Medium",
+  "components": ["data", "web"],
+  "description": "Create a small faux product catalog as a data package and show it on a new page in the GoReactChat web app.",
+  "acceptanceCriteria": [
+    "AC1: PGDataLayer defines JSON Schemas for category and product, with ~25 faux products across 5 categories as JSON files.",
+    "AC2: PGDataLayer CI validates every data file against its schema and fails on a product whose categoryId does not exist.",
+    "AC3: PGDataLayer ships committed TypeScript types generated from the schemas, and CI fails if they are out of date.",
+    "AC4: GoReactChat web has a /catalog page listing products grouped by category, using the typed data from the pgdatalayer package.",
+    "AC5: GoReactChat web builds and its tests pass against the PGDataLayer commit from the same change."
+  ],
+  "guidance": [
+    "Data is consumed at build time as an npm package installed from GitHub at a full commit SHA. No API, no Postgres.",
+    "PGDataLayer must not have a prepare/build script; commit generated files.",
+    "Reuse the existing Tailwind styling in web/. Do not touch the Go server or the chat page."
+  ]
+}

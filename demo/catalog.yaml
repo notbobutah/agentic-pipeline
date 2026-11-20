@@ -1,0 +1,60 @@
+# Event types this demo may publish (docs/demo §5). The event store rejects any
+# other type — the catalog gate (H-PLT-01). Every entry also exists in the full
+# catalog (docs/04, docs/catalog/*.yaml).
+version: 0.1.0
+types:
+  work:
+    - ap.work.item.assigned.v1
+    - ap.work.item.commented.v1
+    - ap.work.request.received.v1
+    - ap.work.request.accepted.v1
+    - ap.work.request.rejected.v1
+    - ap.work.guidance.provided.v1
+    - ap.work.repos.resolved.v1
+    - ap.work.plan.requested.v1
+    - ap.work.plan.proposed.v1
+    - ap.work.plan.revision.requested.v1
+    - ap.work.plan.approved.v1
+    - ap.work.plan.rejected.v1
+    - ap.work.plan.deviation.detected.v1
+    - ap.work.blocked.v1
+    - ap.work.completed.v1
+    - ap.work.cancelled.v1
+  command:
+    - ap.command.received.v1
+    - ap.command.accepted.v1
+    - ap.command.rejected.v1
+  devsession:
+    - ap.devsession.requested.v1
+    - ap.devsession.started.v1
+    - ap.devsession.checkpoint.v1
+    - ap.devsession.inner_loop.completed.v1
+    - ap.devsession.commit.pushed.v1
+    - ap.devsession.change.opened.v1
+    - ap.devsession.feedback.received.v1
+    - ap.devsession.iteration.started.v1
+    - ap.devsession.ready_for_review.v1
+    - ap.devsession.blocked.v1
+    - ap.devsession.completed.v1
+  changeset:
+    - ap.changeset.created.v1
+    - ap.changeset.member.updated.v1
+    - ap.changeset.ready.v1
+    - ap.changeset.merged.v1
+  change:
+    - ap.change.opened.v1
+    - ap.change.updated.v1
+    - ap.change.review.submitted.v1
+    - ap.change.merged.v1
+  pipeline:
+    - ap.pipeline.run.completed.v1
+    - ap.pipeline.job.completed.v1
+    - ap.diagnosis.completed.v1
+    - ap.deployment.completed.v1
+  agent:
+    - ap.agent.task.assigned.v1
+    - ap.agent.task.completed.v1
+    - ap.agent.proposal.created.v1
+    - ap.agent.escalated.v1
+  policy:
+    - ap.policy.decision.recorded.v1

@@ -1,0 +1,44 @@
+{
+  "summary": "Publish a typed faux catalog from PGDataLayer and render it on a new /catalog page in GoReactChat web, pinned to the data commit from the same change.",
+  "approach": [
+    "PGDataLayer: add JSON Schemas for category and product, 5 categories and 25 products as JSON.",
+    "PGDataLayer: add a validator (ajv) run by npm test that checks schema conformance and categoryId references.",
+    "PGDataLayer: generate index.d.ts from the schemas (json-schema-to-typescript) and add npm run check that fails when it is stale.",
+    "GoReactChat web: depend on pgdatalayer at the data PR's head SHA; add src/app/catalog/page.tsx grouping products by category.",
+    "GoReactChat web: add vitest with a component test rendering the page from the package data."
+  ],
+  "repos": [
+    { "component": "data", "repo": "notbobutah/PGDataLayer", "changes": [
+      { "path": "schema/category.schema.json", "action": "create", "purpose": "Category schema" },
+      { "path": "schema/product.schema.json", "action": "create", "purpose": "Product schema with categoryId" },
+      { "path": "data/categories.json", "action": "create", "purpose": "5 faux categories" },
+      { "path": "data/products.json", "action": "create", "purpose": "25 faux products" },
+      { "path": "scripts/generate-types.mjs", "action": "create", "purpose": "Generate index.d.ts from schemas" },
+      { "path": "index.d.ts", "action": "create", "purpose": "Committed generated types" },
+      { "path": "test/data.test.mjs", "action": "create", "purpose": "Schema + referential integrity tests" },
+      { "path": "package.json", "action": "modify", "purpose": "devDependencies, check script, exports for types" }
+    ]},
+    { "component": "web", "repo": "notbobutah/GoReactChat", "changes": [
+      { "path": "web/package.json", "action": "modify", "purpose": "pgdatalayer dependency at SHA, vitest, test script" },
+      { "path": "web/package-lock.json", "action": "modify", "purpose": "Lockfile for new dependencies" },
+      { "path": "web/src/app/catalog/page.tsx", "action": "create", "purpose": "Catalog page grouped by category" },
+      { "path": "web/src/app/catalog/page.test.tsx", "action": "create", "purpose": "Renders all categories and products" },
+      { "path": "web/vitest.config.ts", "action": "create", "purpose": "Test runner config" }
+    ]}
+  ],
+  "tests": [
+    { "name": "test/data.test.mjs: every data file validates against its schema", "component": "data", "level": "unit", "covers": ["AC1", "AC2"] },
+    { "name": "test/data.test.mjs: dangling categoryId fails", "component": "data", "level": "unit", "covers": ["AC2"] },
+    { "name": "npm run check: generated types are current", "component": "data", "level": "build", "covers": ["AC3"] },
+    { "name": "web/src/app/catalog/page.test.tsx: groups products by category", "component": "web", "level": "unit", "covers": ["AC4"] },
+    { "name": "web-ci: lint, typecheck, test, build against pinned pgdatalayer SHA", "component": "web", "level": "integration", "covers": ["AC4", "AC5"] }
+  ],
+  "outOfScope": ["Go server", "Postgres", "chat page changes"],
+  "risks": ["Next.js 16 conventions differ from older versions; follow web/AGENTS.md and bundled docs."],
+  "openQuestions": [],
+  "scopeEnvelope": [
+    { "component": "data", "pathGlobs": ["schema/**", "data/**", "scripts/**", "test/**", "index.d.ts", "package.json", "package-lock.json"] },
+    { "component": "web", "pathGlobs": ["web/src/app/catalog/**", "web/package.json", "web/package-lock.json", "web/vitest.config.ts"] }
+  ],
+  "estimate": { "iterations": "2-4", "costUsd": 6.0, "wallclockMinutes": 40 }
+}

@@ -1,0 +1,30 @@
+# Demo deployment configuration (docs/demo §4).
+tenant: demo
+team: demo
+stateDir: .ap                    # event log + agent task workdirs (gitignored)
+agentUser: pipeline-agent        # the "Jira user" a card is assigned to
+eligibleIssueTypes: [Story, Task, Bug]
+
+identities:                      # tracker user → GitHub login; only these may guide/approve
+  rob: { github: notbobutah }
+
+components:                      # Jira component → repo + scope envelope ceiling
+  data:
+    repo: notbobutah/PGDataLayer
+    root: .
+    paths: ["**"]
+    forbidden: [".github/**", ".agentic/**"]
+  web:
+    repo: notbobutah/GoReactChat
+    root: web
+    paths: ["web/**"]
+    forbidden: [".github/**", ".agentic/**", "server/**", "deploy/**", "migrations/**", "proto/**"]
+
+dependencyOrder: [data, web]     # producer first: merge order and version pinning
+
+agents:
+  image: ap-sandbox:node24
+  model: claude-opus-5-5
+  auth: api-key                  # api-key (ANTHROPIC_API_KEY) | claude-login (~/.claude/.credentials.json)
+  roles:
+    implementation-planner: { maxTurns: 60, maxBudgetUsd: 4 }
