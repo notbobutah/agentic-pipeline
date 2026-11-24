@@ -1,6 +1,6 @@
 # agentic-pipeline — Agentic Development & Event-Driven Build Pipeline
 
-> Status: **Draft / design phase** · Last updated: 2026-11-20
+> Status: **Design draft + working demo (phases P1–P4)** · Last updated: 2026-11-24 · What is built vs designed: [16 — Implementation Status](16-implementation-status.md)
 
 agentic-pipeline takes a **Jira task assigned to an agent**, together with **guidance from a developer**. It proposes an implementation plan that **the developer approves**, then agents work in the background to **write code and tests** and commit them to the repos involved. An **event-driven build pipeline** builds, tests and **integration-tests** every commit, and feeds failures back to the agents until the change is green and ready for human review.
 
@@ -38,7 +38,8 @@ The **event model is the spine of the system**. Every external stimulus (a Jira 
 | 11 | [Open Questions](11-open-questions.md) | Decisions still pending |
 | 12 | [Build Process Events](12-build-process-events.md) | The canonical build lifecycle and 95 typed events emitted inside a job (categories A–Q) |
 | 13 | [Event Handlers](13-event-handlers.md) | Handler registry: categories, subscriptions, idempotency, failure policy |
-| — | [demo/](demo/README.md) | **Demo plan:** two GitHub repos + one card, end to end |
+| 16 | [Implementation Status](16-implementation-status.md) | What the code implements, the DEMO-1 run, known issues, demo stand-ins vs the design |
+| — | [demo/](demo/README.md) | **Demo:** two GitHub repos + one card, end to end. Plan, runbook and status. |
 | — | [catalog/](catalog/) | Machine-readable `build-events.yaml`, `work-events.yaml`, `handlers.yaml` |
 | — | [Glossary](glossary.md) | Terms |
 | — | [ADRs](adr/) | Architecture Decision Records |

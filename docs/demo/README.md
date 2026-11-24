@@ -2,7 +2,9 @@
 
 > A thin vertical slice of the design ([14](../14-work-plane.md), [15](../15-integration-testing.md), [03](../03-event-model.md)) running end to end against real GitHub repos. A local card stands in for a Jira task. Agents plan; a developer approves; agents write code and tests in two repos; GitHub Actions verifies; feedback loops back; both PRs end ready for review.
 >
-> The point is the **process automation**, not the app. Nothing is deployed, but everything is **built and tested**, because without checks that can fail there is no feedback loop to demonstrate.
+> The point is the **process automation**, not the app. Everything is **built and tested**, because without checks that can fail there is no feedback loop to demonstrate. Deployment to `dev` was added to scope on 2026-11-20 (§7).
+>
+> **Status (2026-11-24):** P1–P4 are implemented. DEMO-1 ran end to end on 2026-11-20. See [16 — Implementation Status](../16-implementation-status.md) for the run results and known issues.
 
 ## 1. What the demo proves
 
@@ -47,7 +49,7 @@ flowchart LR
 | Durable workflows | Temporal (ADR-0003) | Work items and sessions are **event-sourced state machines**, rebuilt from the log on restart |
 | Policy engine | OPA | Plain Go functions; every decision is still emitted as `ap.policy.decision.recorded` |
 | Executors | microVM executors | **GitHub Actions is the executor.** Its check runs are mapped to `ap.pipeline.run.*` / `ap.pipeline.job.*`. |
-| Ingestion | Webhooks + reconciler | **Polling only** (the reconciler path): check runs, reviews, merges every 15 s. No tunnel needed. |
+| Ingestion | Webhooks + reconciler | **Polling only** (the reconciler path): check runs, reviews, merges and the deploy workflow every 30 s. No tunnel needed. |
 | Jira | Jira Cloud app | Local card file in. The Work Reporter writes "Jira comments" to `demo/cards/DEMO-1.activity.md` and the console. |
 | Agent runtime | Agent Gateway | Go launches one Docker container per agent task. A **TypeScript runner using the Claude Agent SDK** runs inside it (there is no Go Agent SDK). |
 | Applier | Deterministic Applier | Go, on the host: Scope Guard → `git commit` with trailers → push. **The sandbox never holds a GitHub token.** |
@@ -150,36 +152,39 @@ ap timeline DEMO-1                           # full correlated event tree
 Notes:
 - The CI workflows call **repo scripts** (`npm test`, `npm run check`). The agents write the tests and validators those scripts run (AC2, AC3, AC5), so CI starts trivially green and becomes meaningful as agents add work.
 - GoReactChat's existing `publish image` workflow also runs on PRs and builds the Go backend. The Feedback Router treats checks outside the change's affected project (`web`) as unrelated, so agents don't chase them.
-- **Deployment is in scope** (approved 2026-11-20): the demo runs through merge, and the `/catalog` page may go live. As of 2026-11-20, though, GoReactChat's `publish image` and `deploy dev` workflows are **disabled** (`disabled_manually`, last run 2026-08-16). Until they are re-enabled, a merge runs only `web ci`. Once enabled, the poller maps the `deploy dev` run to `ap.deployment.completed`, which closes the work item.
+- **Deployment is in scope** (approved 2026-11-20): the demo runs through merge, and the `/catalog` page may go live. GoReactChat's `publish image` and `deploy dev` workflows were re-enabled for the DEMO-1 run. The poller maps the `deploy dev` run on the merge SHA (`deploy: deploy-dev.yml` in `demo/config.yaml`) to `ap.deployment.completed`, which closes the work item.
+- In DEMO-1, `deploy dev` **failed** at its ingress smoke test, but the work item still closed as `merged-and-deployed`. That is known issue K1 in [16 §4](../16-implementation-status.md#4-known-issues).
 
 ## 8. Build phases
 
 | Phase | Delivers | Done when |
 |-------|----------|-----------|
 | P0 Setup | Seed PGDataLayer; GoReactChat CI PR merged; `web` baseline verified green (lint, typecheck, build on current `main`) | Both repos have a green CI run on `main` |
-| P1 Event core + intake + plan | Envelope, SQLite log, catalog gate, dispatcher, `ap card submit`, repo resolver, planner runner, `plan show/revise/approve`, activity file | Plan v2 approved, with the event tree visible in `ap timeline` |
-| P2 Sessions + PRs | Sandbox image, runner (Test Author, Coding), Scope Guard, Applier, branches `ap/DEMO-1/<repo>`, draft PRs | Two draft PRs with tests-first commit history |
-| P3 Feedback loop | Actions poller → pipeline events, rules classifier, Feedback Router, iteration and stop conditions | A red check produces a fix commit with no human input |
-| P4 Changeset | Pinning the frontend to the data PR's SHA, joint readiness, ready-for-review, re-pin after the data merge | Both PRs ready for review; after the data merge, the frontend re-pins and goes green |
-| P5 Polish | `ap timeline` rendering, cost per card, a recorded run | Repeatable 15-minute demo |
+| P1 Event core + intake + plan ✅ | Envelope, SQLite log, catalog gate, dispatcher, `ap card submit`, repo resolver, planner runner, `plan show/revise/approve`, activity file | Plan v2 approved, with the event tree visible in `ap timeline` |
+| P2 Sessions + PRs ✅ | Sandbox image, runner (Test Author, Coding), Scope Guard, Applier, branches `ap/DEMO-1/<repo>`, draft PRs | Two draft PRs with tests-first commit history |
+| P3 Feedback loop ✅ built, not yet exercised live | Actions poller → pipeline events, rules classifier, Feedback Router, iteration and stop conditions | A red check produces a fix commit with no human input |
+| P4 Changeset ✅ | Pinning the frontend to the data PR's SHA, joint readiness, ready-for-review, re-pin after the data merge | Both PRs ready for review; after the data merge, the frontend re-pins and goes green |
+| P5 Polish 🟡 partial | `ap timeline` rendering, cost per card, a recorded run | Repeatable 15-minute demo |
 
 ## 9. Code layout (in this repo)
 
 ```
 cmd/ap/                 CLI + serve
 internal/event/         envelope, UUIDv7, SQLite store, dispatcher, catalog gate
-internal/work/          work item state machine, plan approval, repo resolver
-internal/session/       session state machine, scope guard, applier (git)
-internal/feedback/      feedback router, rules classifier
-internal/changeset/     changeset coordinator, pin updates
-internal/github/        poller (→ events), reporter (PRs, labels, comments, ready-for-review)
-internal/agent/         gateway: docker launch, budgets, result validation
+internal/work/          card ingest, comment parser, work item state machine, planner, plan validation + approval, reporter
+internal/session/       session state machine + orchestrator, git workspaces, scope guard, applier,
+                        poller (checks, reviews, merges, deploys → events), feedback router + rules classifier,
+                        changeset coordinator (pinning, readiness, merge, deploy → work completed)
+internal/gh/            GitHub wrapper: PRs, labels, comments, checks, workflow runs
+internal/agent/         gateway: docker launch, budgets, telemetry, result validation
+internal/feed/          JSON snapshots for the /pipeline page (orphan `feed` branch)
+internal/config/        demo/config.yaml loader
 runner/                 TypeScript agent runner (Claude Agent SDK)
 sandbox/Dockerfile      node:24 + git + runner
-demo/                   cards/, config.yaml, catalog.yaml
+demo/                   cards/, config.yaml, catalog.yaml, fixtures/
 ```
 
-## 10. Running it (P1)
+## 10. Running it
 
 ```bash
 go build -o bin/ap ./cmd/ap
@@ -194,7 +199,10 @@ export AP_AGENT_AUTH=claude-login       # or: copy ~/.claude/.credentials.json i
 ./bin/ap plan show DEMO-1
 ./bin/ap revise DEMO-1 "feedback..."    # → plan v2
 ./bin/ap plan show DEMO-1 --diff
-./bin/ap approve DEMO-1                 # only the card's sponsor; binds to the plan digest
+./bin/ap approve DEMO-1                 # only the card's sponsor; binds to the plan digest → coding sessions start
+./bin/ap status DEMO-1                  # sessions, iterations, PRs, check results
+#   keep `ap serve` running: it polls CI, routes feedback, re-pins the consumer, marks PRs ready for review
+#   human: review + merge the PRs (producer first) → re-pin → deploy → work completed
 ./bin/ap timeline DEMO-1                # causation tree of every event
 cat demo/cards/DEMO-1.activity.md       # the "Jira comments"
 ```
@@ -221,9 +229,9 @@ The page is read-only. Runs are started from the CLI and plans are approved by t
 | `DEMO-3` Product detail page `/catalog/[id]` | web | DEMO-1 |
 | `DEMO-4` Inventory levels across data and web | data + web | DEMO-1 |
 
-Run them in order with `ap card submit demo/cards/DEMO-N.json`. Until P2 lands, a card stops after plan approval.
+Run them in order with `ap card submit demo/cards/DEMO-N.json`. Each one runs through coding sessions, CI, merge and deploy.
 
-**P1 status (2026-11-20):** done. Real planner runs work through the sandbox with `claude-login` auth.
+**Status (2026-11-20):** DEMO-1 ran end to end: plan v1 approved, `PGDataLayer#1` and `GoReactChat#7` merged, deploy ran, $4.77 agent cost. DEMO-2 … DEMO-4 have not been run yet. Details: [16 §3](../16-implementation-status.md#3-first-end-to-end-run-demo-1-2026-11-20).
 
 ## 11. Risks
 
@@ -233,5 +241,5 @@ Run them in order with `ap card submit demo/cards/DEMO-N.json`. Until P2 lands, 
 | Next.js 16 API differences trip the agent | `npm ci` before the agent starts; the prompt points at the bundled Next docs (per `web/AGENTS.md`); the outer loop catches the rest |
 | The loop never shows because the first attempt is green | Acceptable. AC2/AC3/AC5 make a first-pass miss likely. Never inject a fake failure. |
 | Cost per run | Budgets per role. Planner and coding on `claude-opus-5-5`. Cost reported per card. |
-| GitHub API rate limits from polling | 15 s interval, ETags, only tracked PRs; well under 5k/h |
+| GitHub API rate limits from polling | 30 s interval, only tracked PRs; well under 5k/h. ETags are not implemented yet. |
 | Credentials leaking into the sandbox | Only Anthropic credentials enter containers. GitHub writes happen on the host via the Applier. |

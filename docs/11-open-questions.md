@@ -1,5 +1,7 @@
 # 11 — Open Questions
 
+> The demo makes simplifying choices for several of these (SQLite instead of a bus for Q1, GitHub Actions as the executor for Q3, compose-in-job for Q20). Those are stand-ins, **not decisions**. See [16 §5](16-implementation-status.md#5-demo-stand-ins-vs-the-design).
+
 | # | Question | Options | Leaning | Owner |
 |---|----------|---------|---------|-------|
 | Q1 | Bus technology | Kafka-compatible (Redpanda / MSK) vs NATS JetStream vs cloud-native pub/sub | Kafka-compatible (replay, ecosystem, partition ordering). See ADR-0002. | Platform |
