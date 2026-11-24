@@ -56,7 +56,7 @@ Not yet demonstrated live:
 
 | # | Issue | Where | Effect |
 |---|-------|-------|--------|
-| K1 | **A failed deployment completes the work item.** The `TDeployed` handler emits `ap.work.completed` with `outcome: merged-and-deployed` and never checks `conclusion`. | `internal/session/feedback.go` (`Coordinator`, `case TDeployed`) | DEMO-1 shows as done although `deploy dev` failed. It should block or escalate the work item, as the design requires (14 §3: `Merging → Done` only when the change is delivered). |
+| K1 | ✅ **Fixed 2026-11-24.** A failed deployment used to complete the work item: the `TDeployed` handler emitted `ap.work.completed` without checking `conclusion`. It now emits `ap.agent.escalated` + `ap.work.blocked` (`deploy-failed`). The poller keeps watching, and keys re-runs by attempt, so a successful re-run completes the item. Covered by `TestDeployOutcome`. | `internal/session/feedback.go` (`Coordinator`), `state.go` (`Fold`), `poller.go` | DEMO-1's log still records `ap.work.completed` from before the fix. Events are append-only, so the history is left as it happened. |
 | K2 | The poll interval is **30 s**, not the documented 15 s, and requests don't use ETags. | `internal/session/poller.go` (default `Interval`) | Slower feedback. The rate-limit reasoning in demo §11 assumed 15 s with ETags. |
 | K3 | The CI fix loop has no live evidence (§3). | — | P3 is unproven until a red check occurs on a real run. |
 
@@ -82,4 +82,6 @@ Not yet demonstrated live:
 - **work:** fixture plan validation, plan validation errors, component matching, and the full intake → plan → revise → approve flow, including a replay that must add zero events.
 - **session:** test-assertion diffing and test picking, Scope Guard.
 
-There are no automated tests for the poller, Feedback Router, changeset coordinator or deploy handling (see K1).
+- **session:** deploy outcome: a failed deploy blocks and escalates, and a successful re-run completes the item (`TestDeployOutcome`).
+
+There are no automated tests for the poller, Feedback Router or changeset readiness and merging.

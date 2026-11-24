@@ -95,3 +95,71 @@ func TestGuard(t *testing.T) {
 		}
 	}
 }
+
+// TestDeployOutcome checks that a failed deploy blocks the work item and
+// escalates instead of completing it, and that a successful re-run completes it.
+func TestDeployOutcome(t *testing.T) {
+	ctx := context.Background()
+	cat, err := event.LoadCatalog(filepath.Join("..", "..", "demo", "catalog.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := event.Open(filepath.Join(t.TempDir(), "e.db"), cat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	h := Coordinator{&Deps{Store: st, Cfg: &config.Config{}, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}}
+	root, _ := event.New(event.Spec{Type: work.TItemAssigned, Subject: "work/X", CorrelationID: "wi-t-X"})
+	deploy := func(key, conclusion string, attempt int) []*event.Event {
+		t.Helper()
+		e, _ := emitFrom(root, TDeployed, key, Deployed{Component: "web", Repo: "o/r", SHA: "abc", Environment: "dev", Conclusion: conclusion, URL: "u", Attempt: attempt})
+		if _, err := st.Publish(ctx, e); err != nil {
+			t.Fatal(err)
+		}
+		out, err := h.Handle(ctx, e)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := st.Publish(ctx, out...); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	types := func(evs []*event.Event) string {
+		var s []string
+		for _, e := range evs {
+			s = append(s, e.Type)
+		}
+		return strings.Join(s, ",")
+	}
+	state := func() (*Item, *work.State) {
+		t.Helper()
+		evs, err := st.Correlation(ctx, "wi-t-X")
+		if err != nil {
+			t.Fatal(err)
+		}
+		it, err := Fold(evs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return it, it.Work
+	}
+	if _, err := st.Publish(ctx, root); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := types(deploy("1", "failure", 1)), work.TAgentEscalated+","+work.TWorkBlocked; got != want {
+		t.Fatalf("failed deploy emitted %s, want %s", got, want)
+	}
+	if it, ws := state(); it.Done || it.Deployed || ws.Status != work.StBlocked {
+		t.Fatalf("after failed deploy: done=%v deployed=%v status=%s", it.Done, it.Deployed, ws.Status)
+	}
+
+	if got := types(deploy("1-2", "success", 2)); got != TWorkCompleted {
+		t.Fatalf("successful re-run emitted %s, want %s", got, TWorkCompleted)
+	}
+	if it, ws := state(); !it.Done || !it.Deployed || ws.Status != work.StDone {
+		t.Fatalf("after re-run: done=%v deployed=%v status=%s", it.Done, it.Deployed, ws.Status)
+	}
+}

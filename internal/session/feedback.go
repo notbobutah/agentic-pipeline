@@ -94,6 +94,7 @@ func (h FeedbackRouter) Handle(ctx context.Context, e *event.Event) ([]*event.Ev
 
 // Coordinator is H-WRK-09 (+ completion): marks the changeset ready when every
 // member is green, records merges, and closes the work item once deployed.
+// A failed deploy blocks the work item and escalates to the sponsor instead.
 type Coordinator struct{ *Deps }
 
 func (h Coordinator) Name() string    { return "H-WRK-09.changeset-coordinator" }
@@ -171,6 +172,13 @@ func (h Coordinator) Handle(ctx context.Context, e *event.Event) ([]*event.Event
 		if err := e.Decode(&d); err != nil {
 			return nil, err
 		}
+		if d.Conclusion != "success" {
+			summary := fmt.Sprintf("%s deploy to %s at %.12s concluded %q (%s). Fix or re-run the deploy; a successful run completes the work item.",
+				d.Component, d.Environment, d.SHA, d.Conclusion, d.URL)
+			esc, err1 := emitFrom(e, work.TAgentEscalated, "deploy-failed-"+e.ID, work.Escalated{Reason: "deploy-failed", Summary: summary})
+			blk, err2 := emitFrom(e, work.TWorkBlocked, "deploy-failed-"+e.ID, work.Reason{Reason: "deploy-failed", Detail: summary})
+			return []*event.Event{esc, blk}, firstErr(err1, err2)
+		}
 		done, err := emitFrom(e, TWorkCompleted, "completed", map[string]any{
 			"outcome": "merged-and-deployed", "deployment": d, "changes": changes(it), "costUsd": it.Work.CostUSD,
 		})
@@ -222,5 +230,3 @@ func firstErr(errs ...error) error {
 	}
 	return nil
 }
-
-var _ = work.TPolicyDecision

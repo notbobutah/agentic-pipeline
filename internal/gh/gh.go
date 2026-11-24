@@ -162,6 +162,7 @@ type WorkflowRun struct {
 	HeadSHA    string `json:"head_sha"`
 	HTMLURL    string `json:"html_url"`
 	UpdatedAt  string `json:"updated_at"`
+	RunAttempt int    `json:"run_attempt"`
 }
 
 // Runs lists recent runs of a workflow file.

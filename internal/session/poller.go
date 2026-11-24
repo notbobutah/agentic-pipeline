@@ -171,8 +171,13 @@ func (p *Poller) pollDeploy(ctx context.Context, it *Item) {
 				continue
 			}
 			cause := m.Opened
-			if _, err := p.publish(ctx, cause, TDeployed, fmt.Sprint(r.ID), Deployed{
-				Component: c, Repo: m.Repo, SHA: r.HeadSHA, Environment: "dev", Conclusion: r.Conclusion, URL: r.HTMLURL,
+			// A re-run keeps the run ID, so later attempts get their own key.
+			key := fmt.Sprint(r.ID)
+			if r.RunAttempt > 1 {
+				key = fmt.Sprintf("%d-%d", r.ID, r.RunAttempt)
+			}
+			if _, err := p.publish(ctx, cause, TDeployed, key, Deployed{
+				Component: c, Repo: m.Repo, SHA: r.HeadSHA, Environment: "dev", Conclusion: r.Conclusion, URL: r.HTMLURL, Attempt: r.RunAttempt,
 			}); err != nil {
 				p.Log.Warn("publish deploy", "err", err)
 			}

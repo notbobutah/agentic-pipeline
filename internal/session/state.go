@@ -168,6 +168,7 @@ type Deployed struct {
 	Environment string `json:"environment"`
 	Conclusion  string `json:"conclusion"`
 	URL         string `json:"url"`
+	Attempt     int    `json:"attempt,omitempty"`
 }
 
 // ---- projection ----
@@ -283,7 +284,11 @@ func Fold(evs []*event.Event) (*Item, error) {
 		case TCSMerged:
 			it.CSMerged = true
 		case TDeployed:
-			it.Deployed = true
+			// Only a successful deploy delivers the change. After a failure the
+			// poller keeps watching, so a re-run of the deploy is picked up.
+			var d Deployed
+			_ = e.Decode(&d)
+			it.Deployed = d.Conclusion == "success"
 		case TWorkCompleted:
 			it.Done = true
 		}

@@ -153,7 +153,7 @@ Notes:
 - The CI workflows call **repo scripts** (`npm test`, `npm run check`). The agents write the tests and validators those scripts run (AC2, AC3, AC5), so CI starts trivially green and becomes meaningful as agents add work.
 - GoReactChat's existing `publish image` workflow also runs on PRs and builds the Go backend. The Feedback Router treats checks outside the change's affected project (`web`) as unrelated, so agents don't chase them.
 - **Deployment is in scope** (approved 2026-11-20): the demo runs through merge, and the `/catalog` page may go live. GoReactChat's `publish image` and `deploy dev` workflows were re-enabled for the DEMO-1 run. The poller maps the `deploy dev` run on the merge SHA (`deploy: deploy-dev.yml` in `demo/config.yaml`) to `ap.deployment.completed`, which closes the work item.
-- In DEMO-1, `deploy dev` **failed** at its ingress smoke test, but the work item still closed as `merged-and-deployed`. That is known issue K1 in [16 §4](../16-implementation-status.md#4-known-issues).
+- A deploy that doesn't succeed blocks the work item and escalates to the sponsor. Re-running the deploy workflow is picked up, and a successful run completes the item. In DEMO-1 (before this fix), `deploy dev` failed at its ingress smoke test but the item closed anyway. See K1 in [16 §4](../16-implementation-status.md#4-known-issues).
 
 ## 8. Build phases
 
