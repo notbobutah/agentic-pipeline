@@ -1,19 +1,22 @@
 {
   "key": "DEMO-3",
   "issueType": "Story",
-  "summary": "Product detail page",
+  "summary": "Styled site footer",
   "assignee": "pipeline-agent",
   "sponsor": "rob",
-  "priority": "Medium",
+  "priority": "Low",
   "components": ["web"],
-  "description": "Each product on /catalog links to its own page with the full details. Builds on DEMO-1.",
+  "description": "The site has no footer. Add a consistent, styled footer to every page that helps visitors find the other pages and the source code.",
   "acceptanceCriteria": [
-    "AC1: /catalog/[id] renders a product's name, category, description, price and stock state, statically generated for every product in pgdatalayer.",
-    "AC2: An unknown id returns the Next.js not-found page.",
-    "AC3: Product cards on /catalog link to their detail page, and the detail page links back to its category on /catalog.",
-    "AC4: Tests cover the lookup by id and the not-found case."
+    "AC1: A footer component renders on every page from the root layout, below the page content and pinned to the bottom of short pages.",
+    "AC2: It links to the chat (/), /catalog, /pipeline and the GoReactChat and agentic-pipeline GitHub repositories; external links open in a new tab with rel=\"noopener noreferrer\".",
+    "AC3: It shows a short line saying pages on this site were built by the agentic pipeline, and the current year.",
+    "AC4: It is styled with the existing Tailwind conventions, works in light and dark mode, and stacks cleanly at phone width.",
+    "AC5: A test renders the footer and checks every link's href, and that the active page's link is marked with aria-current."
   ],
   "guidance": [
-    "Use generateStaticParams from the package data; no runtime fetching."
+    "Use next/link for internal links and usePathname for the active state, in a small client component.",
+    "Keep it compact: one or two rows, muted text, a top border; no new dependency.",
+    "Do not change the chat page's layout beyond what the footer needs."
   ]
 }

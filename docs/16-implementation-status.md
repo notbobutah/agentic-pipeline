@@ -50,7 +50,7 @@ Not yet demonstrated live:
 - **Outer-loop fix iteration (P3).** The code path exists. It needs a card whose first push goes red; the design forbids injecting fake failures.
 - **Plan revision** (`ap revise` → v2) on a real run. It is covered by `TestFlow`.
 - **Scope deviation** (`plan.deviation.detected`) on a real run. The guard is covered by `TestGuard`.
-- DEMO-2 … DEMO-4 have not been run.
+- DEMO-2 … DEMO-6 have not been run.
 
 ## 4. Known issues
 

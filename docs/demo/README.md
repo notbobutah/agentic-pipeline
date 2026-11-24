@@ -225,13 +225,15 @@ The page is read-only. Runs are started from the CLI and plans are approved by t
 | Card | Repos | Builds on |
 |------|-------|-----------|
 | `DEMO-1` Product catalog page backed by PGDataLayer | data + web | — |
-| `DEMO-2` Search and category filter on /catalog | web | DEMO-1 |
-| `DEMO-3` Product detail page `/catalog/[id]` | web | DEMO-1 |
+| `DEMO-2` Dark / light mode toggle | web | — |
+| `DEMO-3` Styled site footer | web | — |
 | `DEMO-4` Inventory levels across data and web | data + web | DEMO-1 |
+| `DEMO-5` Search and category filter on /catalog | web | DEMO-1 |
+| `DEMO-6` Product detail page `/catalog/[id]` | web | DEMO-1 |
 
 Run them in order with `ap card submit demo/cards/DEMO-N.json`. Each one runs through coding sessions, CI, merge and deploy.
 
-**Status (2026-11-20):** DEMO-1 ran end to end: plan v1 approved, `PGDataLayer#1` and `GoReactChat#7` merged, deploy ran, $4.77 agent cost. DEMO-2 … DEMO-4 have not been run yet. Details: [16 §3](../16-implementation-status.md#3-first-end-to-end-run-demo-1-2026-11-20).
+**Status (2026-11-20):** DEMO-1 ran end to end: plan v1 approved, `PGDataLayer#1` and `GoReactChat#7` merged, deploy ran, $4.77 agent cost. DEMO-2 … DEMO-6 have not been run yet. Details: [16 §3](../16-implementation-status.md#3-first-end-to-end-run-demo-1-2026-11-20).
 
 ## 11. Risks
 

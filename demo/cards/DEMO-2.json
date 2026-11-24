@@ -1,20 +1,21 @@
 {
   "key": "DEMO-2",
   "issueType": "Story",
-  "summary": "Search and category filter on the catalog page",
+  "summary": "Dark / light mode toggle for the web app",
   "assignee": "pipeline-agent",
   "sponsor": "rob",
   "priority": "Medium",
   "components": ["web"],
-  "description": "Visitors to /catalog should be able to narrow the list by typing a search term and by choosing a category. Builds on DEMO-1.",
+  "description": "The site follows the operating system's colour scheme today, with no way to change it. Add a theme toggle so visitors can choose light, dark or system, and make every page honour the choice.",
   "acceptanceCriteria": [
-    "AC1: /catalog has a text search that filters products by name and description, case-insensitively, as the visitor types.",
-    "AC2: /catalog has a category filter (all + one option per category) that combines with the search.",
-    "AC3: The filter state is reflected in the URL query string so a filtered view can be shared.",
-    "AC4: Unit tests cover the filtering function, including combined search + category and the empty-result message."
+    "AC1: A theme toggle with three options (light, dark, system) is visible on every page and is keyboard accessible with an accessible name.",
+    "AC2: Choosing light or dark overrides the OS preference on every page (chat, /catalog, /pipeline), including all existing Tailwind dark: styles; system follows prefers-color-scheme.",
+    "AC3: The choice persists in localStorage across reloads and visits, and the page renders in the chosen theme on first paint with no flash of the wrong theme.",
+    "AC4: Unit tests cover theme resolution (stored choice vs system preference) and persisting the choice."
   ],
   "guidance": [
-    "Keep the page statically rendered; do filtering on the client in a small client component.",
-    "Do not add a UI library; use the existing Tailwind classes."
+    "Tailwind v4: switch the dark variant to a class or data attribute with @custom-variant in globals.css, and move the prefers-color-scheme block in globals.css to the same mechanism.",
+    "Avoid the flash with a small inline script in the root layout that sets the theme before hydration; no new dependency such as next-themes.",
+    "Keep the existing colours; this card adds control, not a redesign. Do not touch the Go server."
   ]
 }
