@@ -1,6 +1,14 @@
-# Agent sandbox: Node 24 (the demo repos' toolchain) + git + the ap-runner.
+# Agent sandbox: Node 24 and Go (the demo repos' toolchains) + git + the ap-runner.
 # Debian, not alpine: the Agent SDK bundles a glibc-linked binary.
+# Go is for the `api` component (GoReactChat/server). The version matches
+# server/go.mod so `go` never tries to download a toolchain at task time.
+FROM golang:1.26.6-bookworm AS go
+
 FROM node:24-bookworm-slim
+
+COPY --from=go /usr/local/go /usr/local/go
+# Module and build caches under /tmp: the image user has no writable GOPATH.
+ENV PATH=/usr/local/go/bin:$PATH GOPATH=/tmp/go GOCACHE=/tmp/go-build GOTOOLCHAIN=local
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git ca-certificates \

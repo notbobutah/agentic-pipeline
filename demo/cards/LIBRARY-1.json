@@ -1,0 +1,31 @@
+{
+  "key": "LIBRARY-1",
+  "issueType": "Story",
+  "summary": "Expona video portfolio on rob.expona.ai, served from the existing object store",
+  "assignee": "pipeline-agent",
+  "sponsor": "rob",
+  "priority": "Medium",
+  "components": [
+    "api",
+    "web"
+  ],
+  "description": "The next-expona platform renders cinematic marketing films through mini-crew-service and stores them in Linode Object Storage: bucket expona-images (us-lax-1), keys videos/<job_id>/<file>.mp4 (cinematic.mp4, cinematic-graded.mp4, ...), public-read, with Range support. About 30 films exist today. Add a portfolio of these videos to rob.expona.ai: the Go backend lists and describes them, and the web app gets a /videos page where visitors watch and download them. No upload and no new storage; the bucket is the source of truth and is only read.",
+  "acceptanceCriteria": [
+    "AC1: GET /api/videos on the Go backend returns the portfolio as JSON, newest first: for each video an id (the job_id path segment), title, description, url (the public object URL), sizeBytes and lastModified. It is built by listing VIDEO_S3_BUCKET under VIDEO_S3_PREFIX (default videos/) with S3 ListObjectsV2 against VIDEO_S3_ENDPOINT, following continuation tokens.",
+    "AC2: Only real videos are listed: keys ending in .mp4, .webm or .mov whose stored Content-Type (from a HEAD request) is video/*. Objects that fail this check are skipped and logged once; for example videos/6129bfa4-.../product-demo.mp4 is really a PNG. When a job folder holds several videos, prefer cinematic-graded.mp4, then cinematic.mp4, then the newest file.",
+    "AC3: Titles and descriptions come from the curated catalog already committed at server/internal/video/catalog.json (27 entries, keyed by id: {title, description, hidden}), embedded into the binary with go:embed. hidden: true removes a video from the list. A video with no catalog entry is still listed, with the title 'Expona film' and its date (for example 'Expona film · 22 Aug 2026').",
+    "AC4: GET /api/videos/{id}/download responds 302 to a presigned GET URL for that object, valid for 15 minutes, with response-content-disposition=attachment and a filename of expona-<id>.mp4. An id not in the current listing returns 404; an id that is not a UUID returns 400. The id is never used to build an object key except by lookup in the listing.",
+    "AC5: The listing is cached in memory for VIDEO_CACHE_TTL (default 5 minutes), so a page view does not list the bucket. If the store is unreachable or VIDEO_S3_BUCKET is unset, /api/videos returns 503 with a JSON error, and the rest of the server (chat, /health) is unaffected.",
+    "AC6: GoReactChat web has a /videos page titled 'Expona portfolio', linked from the site navigation: a responsive grid of cards, each with an HTML5 player (preload=metadata, playsInline, controls) pointed at the public url, the title, the description, the date and a Download button that links to /api/videos/{id}/download. It has a loading state, an empty state and an error state.",
+    "AC7: Tests. Go: listing with pagination, the type filter and folder preference, catalog titles and the hidden flag, the default title, the cache, 503 on a store failure, and the download redirect (404 for an unknown id, 400 for a non-UUID, and the attachment disposition). Use an httptest S3 stub, never the real bucket. Web: rendering the grid from a fixture, the empty and error states, and the Download link."
+  ],
+  "guidance": [
+    "Plain net/http handlers on the existing mux in server/cmd/lumid/main.go, not a ConnectRPC service. Put the logic in a new package server/internal/video and keep main.go to wiring. Use github.com/minio/minio-go/v7 for list, stat and presign; it works with Linode Object Storage, and next-expona uses the same client.",
+    "Never proxy video bytes through the API pod. Playback uses the public object URL directly, and download uses a presigned redirect. The pod is a single replica with strategy Recreate and must stay that way.",
+    "Configuration is environment only: VIDEO_S3_ENDPOINT (https://us-lax-1.linodeobjects.com), VIDEO_S3_REGION (us-lax-1), VIDEO_S3_BUCKET (expona-images), VIDEO_S3_PREFIX (videos/), VIDEO_S3_ACCESS_KEY and VIDEO_S3_SECRET_KEY, and VIDEO_CACHE_TTL. The keys will be a read-only key limited to expona-images. Never log them.",
+    "The browser calls the API same-origin with a relative /api/videos URL, as web/src/lib/chat-client.ts does. Video elements load from expona-images.us-lax-1.linodeobjects.com; if the app sets a Content-Security-Policy, add that origin to media-src only.",
+    "Reuse the existing Tailwind styling, including the dark: variants. Do not change the chat page, /catalog or /pipeline beyond adding the nav link. Videos are 16:9 and portrait-safe; use object-contain.",
+    "deploy/** is out of scope for agents. The ConfigMap values, the read-only key in lumi-go-secrets and the /api/videos ingress route are a separate human change.",
+    "catalog.json is curated by the owner from the next-expona assets table. Read it, embed it, and test against your own fixture catalog; do not edit, reorder or regenerate it."
+  ]
+}

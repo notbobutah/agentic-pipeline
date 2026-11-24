@@ -16,6 +16,13 @@ components:                      # Jira component → repo + scope envelope ceil
     forbidden: [".github/**", ".agentic/**"]
     checks: [pgdatalayer]
     innerLoop: ["npm ci", "npm test", "npm run check --if-present"]
+  api:
+    repo: notbobutah/GoReactChat
+    root: server
+    paths: ["server/**"]
+    forbidden: [".github/**", ".agentic/**", "web/**", "deploy/**", "migrations/**", "proto/**", "server/gen/**"]
+    checks: ["lumid (Go backend)"]
+    innerLoop: ["cd server && go build ./...", "cd server && go vet ./...", "cd server && go test ./..."]
   web:
     repo: notbobutah/GoReactChat
     root: web
@@ -27,7 +34,7 @@ components:                      # Jira component → repo + scope envelope ceil
       data: { package: pgdatalayer, spec: "github:notbobutah/PGDataLayer#{sha}" }
     deploy: deploy-dev.yml
 
-dependencyOrder: [data, web]     # producer first: merge order and version pinning
+dependencyOrder: [data, api, web] # producer first: merge order and version pinning
 
 agents:
   image: ap-sandbox:node24

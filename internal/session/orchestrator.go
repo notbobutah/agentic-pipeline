@@ -432,7 +432,7 @@ func (h Orchestrator) runAgent(ctx context.Context, cause *event.Event, it *Item
 var codingTools = []string{"Read", "Write", "Edit", "Glob", "Grep", "Bash"}
 var codingAllowed = []string{
 	"Read", "Write", "Edit", "Glob", "Grep",
-	"Bash(npm:*)", "Bash(npx:*)", "Bash(node:*)", "Bash(cd:*)", "Bash(ls:*)", "Bash(cat:*)", "Bash(head:*)",
+	"Bash(npm:*)", "Bash(npx:*)", "Bash(node:*)", "Bash(go:*)", "Bash(gofmt:*)", "Bash(cd:*)", "Bash(ls:*)", "Bash(cat:*)", "Bash(head:*)",
 	"Bash(tail:*)", "Bash(wc:*)", "Bash(find:*)", "Bash(mkdir:*)", "Bash(rm:*)", "Bash(mv:*)", "Bash(cp:*)",
 	"Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)",
 }
