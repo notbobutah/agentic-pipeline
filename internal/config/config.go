@@ -63,6 +63,21 @@ type Agents struct {
 
 type Identity struct {
 	GitHub string `yaml:"github"`
+	Jira   string `yaml:"jira"` // Jira Cloud account ID
+}
+
+// Jira configures the Jira Cloud watcher. Credentials come from the
+// environment (AP_JIRA_EMAIL, AP_JIRA_TOKEN), never from this file.
+type Jira struct {
+	Site           string   `yaml:"site"`           // https://<name>.atlassian.net; empty = watcher off
+	AgentAccountID string   `yaml:"agentAccountId"` // the agent's Jira account: assignment trigger, and its comments are skipped
+	TriggerLabel   string   `yaml:"triggerLabel"`   // pick up issues with this label instead of by assignee
+	Projects       []string `yaml:"projects"`       // project keys to watch
+	JQL            string   `yaml:"jql"`            // overrides the generated query
+	// AcceptanceCriteriaField is a custom field ID (customfield_10042). Empty =
+	// read an "Acceptance criteria" section from the description.
+	AcceptanceCriteriaField string `yaml:"acceptanceCriteriaField"`
+	PollSeconds             int    `yaml:"pollSeconds"`
 }
 
 type Sessions struct {
@@ -92,6 +107,7 @@ type Config struct {
 	Agents             Agents               `yaml:"agents"`
 	Feed               Feed                 `yaml:"feed"`
 	Sessions           Sessions             `yaml:"sessions"`
+	Jira               Jira                 `yaml:"jira"`
 
 	// BaseDir is the directory relative paths resolve against (the repo root).
 	BaseDir string `yaml:"-"`

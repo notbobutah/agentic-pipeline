@@ -207,6 +207,20 @@ export AP_AGENT_AUTH=claude-login       # or: copy ~/.claude/.credentials.json i
 cat demo/cards/DEMO-1.activity.md       # the "Jira comments"
 ```
 
+### Cards from Jira Cloud
+
+`ap serve` also watches Jira when a site is configured. Open issues carrying the trigger label (`ap-agent`) enter the pipeline like a card file. The reporter becomes the sponsor, and labels or components named `data`, `web` or `api` choose the repos. Acceptance criteria are the bullet list under an "Acceptance criteria" heading in the description. Comments arrive as guidance, and `/ap approve` / `/ap revise` work from Jira.
+
+```bash
+export AP_JIRA_SITE=https://<site>.atlassian.net AP_JIRA_PROJECTS=KAN AP_JIRA_TRIGGER_LABEL=ap-agent
+export AP_JIRA_EMAIL=... AP_JIRA_TOKEN=...      # Atlassian API token
+export AP_JIRA_IDENTITIES=rob=<accountId>       # `ap jira whoami` prints it
+./bin/ap jira list                              # read-only: what would be picked up, and why a card would be rejected
+./bin/ap jira poll                              # publish once; `ap serve` polls every 30 s (--no-jira to disable)
+```
+
+In the cluster these come from ConfigMap `agentic-pipeline-config` and Secret `agentic-pipeline-secrets` (dev-next, infrastructure repo `kubernetes/config/`). Updates to an issue after it is picked up are not re-read.
+
 - `AP_FAKE_AGENT=1` uses `demo/fixtures/*.json` instead of the model (no cost).
 - `AP_USER=<name>` comments as another tracker user. Unmapped users are treated as context only.
 - State lives in `.ap/` (event log `events.db`, agent task dirs `tasks/<id>/` with `task.json` and `result.json`). Delete it to start over.

@@ -13,8 +13,12 @@ import (
 // it emits exactly the L1 events a real Jira integration would.
 
 func l1(cfg *config.Config, key, typ, deliveryKey string, actor string, data any) (*event.Event, error) {
+	return l1From(cfg, "card", key, typ, deliveryKey, actor, data)
+}
+
+func l1From(cfg *config.Config, provider, key, typ, deliveryKey string, actor string, data any) (*event.Event, error) {
 	return event.New(event.Spec{
-		Type: typ, Subject: Subject(key), Source: "//tracker/card", Origin: "webhook",
+		Type: typ, Subject: Subject(key), Source: "//tracker/" + provider, Origin: "webhook",
 		CorrelationID: CorrelationID(cfg.Tenant, key), Key: deliveryKey, Data: data,
 		Actor: &event.Actor{Kind: "human", ID: "tracker:" + actor, Login: actor},
 	})
@@ -40,6 +44,28 @@ func SubmitCard(ctx context.Context, st *event.Store, cfg *config.Config, c *Car
 		evs = append(evs, e)
 	}
 	return st.Publish(ctx, evs...)
+}
+
+// SubmitIssue publishes a tracker issue's assignment to the agent. The
+// delivery key is the issue key, so an issue already submitted is a no-op.
+func SubmitIssue(ctx context.Context, st *event.Store, cfg *config.Config, c *Card, provider map[string]string) (int, error) {
+	e, err := l1From(cfg, provider["name"], c.Key, TItemAssigned, c.Key+"/assigned", c.Sponsor, Assigned{
+		Card: *c, AssignedBy: c.Sponsor, ToAgent: true, Provider: provider,
+	})
+	if err != nil {
+		return 0, err
+	}
+	return st.Publish(ctx, e)
+}
+
+// PublishComment publishes a tracker comment with the tracker's own comment
+// ID, so the same comment seen twice is published once.
+func PublishComment(ctx context.Context, st *event.Store, cfg *config.Config, key, commentID, author, body, provider string) (int, error) {
+	e, err := l1From(cfg, provider, key, TItemCommented, key+"/"+commentID, author, Commented{Key: key, CommentID: commentID, Author: author, Body: body})
+	if err != nil {
+		return 0, err
+	}
+	return st.Publish(ctx, e)
 }
 
 // Comment publishes a tracker comment (guidance or an /ap command).

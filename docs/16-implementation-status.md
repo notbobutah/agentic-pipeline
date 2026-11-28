@@ -64,7 +64,7 @@ Not yet demonstrated live:
 
 | Design | Demo | Gap to close for v1 |
 |--------|------|---------------------|
-| Jira Cloud app + webhooks (05, 14 §4) | Card JSON + `ap card comment`. Reporter writes `demo/cards/<KEY>.activity.md`. | Jira adapter, identity mapping (Q17) |
+| Jira Cloud app + webhooks (05, 14 §4) | Card JSON + `ap card comment`, or the Jira watcher: polls JQL for a trigger label, maps comments, identity mapping by account ID (`internal/jira`). Nothing is written back to Jira; the Reporter writes `demo/cards/<KEY>.activity.md`. | Webhooks, write-back, issue updates, unassignment |
 | GitHub App webhooks + reconciler (ADR-0004) | Polling only, as user `RobatDE`, using `gh` credentials on the host | GitHub App, webhook ingress, raw archive |
 | Kafka-compatible bus + schema registry (ADR-0001/0002, Q1, Q9) | SQLite `events` table + dispatcher. The gate is `demo/catalog.yaml` (~47 types). | Bus, partitioning, registry, projections |
 | Durable workflows / Temporal (ADR-0003) | Event-sourced state machines rebuilt from the log | Durable orchestrator, timers, retries |

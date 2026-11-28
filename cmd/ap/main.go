@@ -4,6 +4,7 @@
 //	ap serve [--once]                 run the dispatchers
 //	ap card submit <card.json>        assign a card to the agent
 //	ap card comment <KEY> <text>      comment as a tracker user (guidance or /ap command)
+//	ap jira <whoami|list|poll>        Jira Cloud: token owner, read-only preview, publish once
 //	ap plan show <KEY> [-v N] [--diff]
 //	ap approve <KEY> | ap revise <KEY> <feedback> | ap reject <KEY> | ap cancel <KEY>
 //	ap status <KEY> | ap timeline <KEY> | ap events [-n N]
@@ -33,6 +34,7 @@ import (
 	"github.com/notbobutah/agentic-pipeline/internal/config"
 	"github.com/notbobutah/agentic-pipeline/internal/event"
 	"github.com/notbobutah/agentic-pipeline/internal/feed"
+	"github.com/notbobutah/agentic-pipeline/internal/jira"
 	"github.com/notbobutah/agentic-pipeline/internal/session"
 	"github.com/notbobutah/agentic-pipeline/internal/work"
 )
@@ -92,7 +94,7 @@ func open() (*app, error) {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: ap <serve|card|plan|approve|revise|reject|cancel|status|timeline|events|feed> ...")
+		return errors.New("usage: ap <serve|card|jira|plan|approve|revise|reject|cancel|status|timeline|events|feed> ...")
 	}
 	a, err := open()
 	if err != nil {
@@ -159,6 +161,8 @@ func run(args []string) error {
 		return a.timeline(ctx, rest[0])
 	case "feed":
 		return a.feedCmd(ctx, rest)
+	case "jira":
+		return a.jiraCmd(ctx, rest)
 	case "events":
 		fs := flag.NewFlagSet("events", flag.ContinueOnError)
 		n := fs.Int("n", 30, "last N events")
@@ -297,6 +301,7 @@ func (a *app) serve(ctx context.Context, args []string) error {
 	once := fs.Bool("once", false, "process until idle, then exit")
 	publish := fs.Bool("publish-feed", false, "publish the public feed when the log changes")
 	noPoll := fs.Bool("no-poll", false, "do not poll GitHub for CI, reviews, merges and deploys")
+	noJira := fs.Bool("no-jira", false, "do not watch Jira for assigned issues")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -330,6 +335,15 @@ func (a *app) serve(ctx context.Context, args []string) error {
 	if *publish {
 		wg.Add(1)
 		go func() { defer wg.Done(); a.feedLoop(ctx, info) }()
+	}
+	if !*noJira && jira.Enabled(a.cfg) {
+		w, err := a.jiraWatcher()
+		if err != nil {
+			return err
+		}
+		a.log.Info("watching jira", "site", a.cfg.Jira.Site, "jql", w.JQL())
+		wg.Add(1)
+		go func() { defer wg.Done(); w.Run(ctx) }()
 	}
 	if !*noPoll {
 		poller := &session.Poller{Deps: a.sessionDeps(nil)}
@@ -504,4 +518,50 @@ func (a *app) events(ctx context.Context, n int) error {
 		fmt.Printf("%5d %s %-42s %-14s %s\n", e.Seq, e.Time.Format("15:04:05"), e.Type, e.Subject, filepath.Base(e.Source))
 	}
 	return nil
+}
+
+func (a *app) jiraWatcher() (*jira.Watcher, error) {
+	c, err := jira.FromEnv(a.cfg)
+	if err != nil {
+		return nil, err
+	}
+	if j := a.cfg.Jira; j.AgentAccountID == "" && j.TriggerLabel == "" && j.JQL == "" {
+		return nil, errors.New("set jira.triggerLabel or jira.agentAccountId (AP_JIRA_TRIGGER_LABEL / AP_JIRA_AGENT_ACCOUNT); `ap jira whoami` prints an account ID")
+	}
+	return &jira.Watcher{Client: c, Store: a.store, Cfg: a.cfg, Log: a.log}, nil
+}
+
+// jiraCmd: whoami (token owner), list (read-only preview), poll (publish once).
+func (a *app) jiraCmd(ctx context.Context, args []string) error {
+	if len(args) != 1 {
+		return errors.New("usage: ap jira <whoami|list|poll>")
+	}
+	if args[0] == "whoami" {
+		c, err := jira.FromEnv(a.cfg)
+		if err != nil {
+			return err
+		}
+		u, err := c.Myself(ctx)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("%s\taccountId=%s\n", u.DisplayName, u.AccountID)
+		return nil
+	}
+	w, err := a.jiraWatcher()
+	if err != nil {
+		return err
+	}
+	switch args[0] {
+	case "list":
+		return w.Preview(ctx, os.Stdout)
+	case "poll":
+		n, err := w.Once(ctx)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("published %d new events; run `ap serve` to process them\n", n)
+		return nil
+	}
+	return fmt.Errorf("unknown jira subcommand %q", args[0])
 }

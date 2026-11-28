@@ -5,8 +5,8 @@ stateDir: .ap                    # event log + agent task workdirs (gitignored)
 agentUser: pipeline-agent        # the "Jira user" a card is assigned to
 eligibleIssueTypes: [Story, Task, Bug]
 
-identities:                      # tracker user → GitHub login; only these may guide/approve
-  rob: { github: notbobutah }
+identities:                      # tracker user → GitHub login (+ Jira account ID); only these may guide/approve
+  rob: { github: notbobutah }     # add jira: <accountId> (`ap jira whoami`) to sponsor from Jira
 
 components:                      # Jira component → repo + scope envelope ceiling
   data:
@@ -53,3 +53,14 @@ sessions:
 feed:                            # public JSON snapshots for the /pipeline page
   repo: notbobutah/agentic-pipeline
   branch: feed
+
+jira:                            # Jira Cloud watcher; off while site is empty. Every key has an AP_JIRA_* override.
+  site: ""                       # https://<name>.atlassian.net (AP_JIRA_SITE)
+  triggerLabel: ap-agent         # pick up open issues with this label (AP_JIRA_TRIGGER_LABEL)
+  agentAccountId: ""             # or by assignee when triggerLabel is empty (AP_JIRA_AGENT_ACCOUNT)
+  projects: []                   # project keys, e.g. [KAN] (AP_JIRA_PROJECTS)
+  acceptanceCriteriaField: ""    # customfield_NNNNN; empty = "Acceptance criteria" section of the description
+  pollSeconds: 30
+  # Labels named after a component (data, web, api) select repos, as Jira components do.
+  # Jira account IDs for identities: AP_JIRA_IDENTITIES=rob=<accountId>.
+  # Credentials: AP_JIRA_EMAIL + AP_JIRA_TOKEN in the environment, never here.
